@@ -1,65 +1,116 @@
-import Image from "next/image";
+import {
+  getDashboardOverview,
+  type CurrencyOverview,
+} from "@/app/actions/dashboard-overview";
+import {
+  getMonthlyCashflowTrend,
+  getRecentTransactions,
+  getTransactionsForMonth,
+} from "@/app/actions/transactions";
+import { DashboardCashflowChart } from "@/components/dashboard-cashflow-chart";
+import { DashboardOverviewSection } from "@/components/dashboard-overview-section";
+import { StatCard } from "@/components/stat-card";
+import { TransactionList } from "@/components/transaction-list";
+import { formatMoney, monthBounds, totalsByCurrency } from "@/lib/money";
+import type { FiatCurrency } from "@/lib/money";
+import { getPreferredCurrency } from "@/lib/preferences";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+const emptyOverview: CurrencyOverview = {
+  assetsFromActivityMinor: 0,
+  liabilitiesFromActivityMinor: 0,
+  projectedIncomeMinor: 0,
+  projectedExpenseMinor: 0,
+  projectedIncomeYearlyMinor: 0,
+  projectedExpenseYearlyMinor: 0,
+};
+
+export default async function DashboardPage() {
+  const { start, end } = monthBounds();
+  const preferredCurrency = await getPreferredCurrency();
+  const [monthTx, recent, overviewData, cashflowTrend] = await Promise.all([
+    getTransactionsForMonth(start, end),
+    getRecentTransactions(8),
+    getDashboardOverview(),
+    getMonthlyCashflowTrend(preferredCurrency, 6),
+  ]);
+
+  const otherCurrency: FiatCurrency =
+    preferredCurrency === "USD" ? "PHP" : "USD";
+  const overview =
+    overviewData?.byCurrency[preferredCurrency] ?? emptyOverview;
+  const otherOverview =
+    overviewData?.byCurrency[otherCurrency] ?? emptyOverview;
+  const showOtherCurrency =
+    otherOverview.assetsFromActivityMinor > 0 ||
+    otherOverview.liabilitiesFromActivityMinor > 0 ||
+    otherOverview.projectedIncomeMinor > 0 ||
+    otherOverview.projectedExpenseMinor > 0 ||
+    otherOverview.projectedIncomeYearlyMinor > 0 ||
+    otherOverview.projectedExpenseYearlyMinor > 0;
+
+  const totals = totalsByCurrency(monthTx);
+  const t = totals[preferredCurrency];
+  const net = t.income - t.expense;
+
+  const monthLabel = start.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-6 sm:space-y-10">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl dark:text-zinc-50">
+          Dashboard
+        </h1>
+        <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          {monthLabel} · amounts below use {preferredCurrency} unless noted.
+          Record transactions in {preferredCurrency} (navbar) so this month and
+          charts match your entries.
+        </p>
+      </div>
+
+      <DashboardCashflowChart data={cashflowTrend} currency={preferredCurrency} />
+
+      <DashboardOverviewSection
+        preferredCurrency={preferredCurrency}
+        overview={overview}
+        otherCurrencyOverview={otherOverview}
+        showOtherCurrency={showOtherCurrency}
+      />
+
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          This month (actual)
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Income"
+            value={formatMoney(t.income, preferredCurrency)}
+            variant="income"
+          />
+          <StatCard
+            label="Expenses"
+            value={formatMoney(t.expense, preferredCurrency)}
+            variant="expense"
+          />
+          <StatCard
+            label="Net"
+            value={formatMoney(net, preferredCurrency)}
+            hint={net >= 0 ? "Ahead this month" : "Overspending"}
+            variant="neutral"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Recent activity
+        </h2>
+        <TransactionList items={recent} />
+      </section>
     </div>
   );
 }
