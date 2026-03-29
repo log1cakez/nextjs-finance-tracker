@@ -113,6 +113,7 @@ Comments in `.env.example` describe Gmail SMTP, Resend, and optional overrides.
 
 ## Excel export
 
+- **UI:** Top bar → click your display name → **Export Excel (.xlsx)** (under Account, above Sign out).
 - **Route:** `GET /api/export/excel` (requires an authenticated session; returns `401` JSON if not signed in).
 - The workbook includes dashboard-aligned summaries plus detail sheets (transactions, categories, accounts, transfers, recurring, lending). Amounts are numeric for spreadsheet use.
 

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { categories, financialAccounts, transactions } from "@/db/schema";
+import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
 import { getSessionUserId } from "@/lib/session";
 import {
   parseAmountToMinor,
@@ -12,6 +13,7 @@ import {
   type FiatCurrency,
 } from "@/lib/money";
 import { getPreferredCurrency } from "@/lib/preferences";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import { encryptTransactionPayload } from "@/lib/transaction-crypto";
 import {
   toDecryptedTransaction,
@@ -50,7 +52,12 @@ function mapWithCategory(
   return {
     ...toDecryptedTransaction(userId, tx),
     category,
-    financialAccount,
+    financialAccount: financialAccount
+      ? {
+          ...financialAccount,
+          name: decryptFinancePlaintext(userId, financialAccount.name),
+        }
+      : null,
   };
 }
 
@@ -122,10 +129,31 @@ export async function createTransaction(
     return { error: "Pick a valid account" };
   }
 
+  const creditPaydownRaw = formData.get("creditPaydown");
+  const creditPaydown =
+    creditPaydownRaw === "on" ||
+    creditPaydownRaw === "true" ||
+    creditPaydownRaw === "1";
+  let reducesCreditBalance = false;
+  if (creditPaydown) {
+    if (parsed.data.kind !== "expense" || fin.bankKind !== "credit") {
+      return {
+        error:
+          "“Card bill payment” only applies to expenses on a credit card account.",
+      };
+    }
+    reducesCreditBalance = true;
+  }
+
+  const description = formatTypedLabel(parsed.data.description.trim());
+  if (!description) {
+    return { error: "Description is required" };
+  }
+
   let payload: string;
   try {
     payload = encryptTransactionPayload(userId, {
-      description: parsed.data.description.trim(),
+      description,
       amountCents: minor,
     });
   } catch (e) {
@@ -148,6 +176,7 @@ export async function createTransaction(
     kind: parsed.data.kind,
     categoryId,
     financialAccountId: parsed.data.financialAccountId,
+    reducesCreditBalance,
     occurredAt,
   });
 
@@ -213,6 +242,30 @@ export async function getRecentTransactions(
   const db = getDb();
   const rows = await db.query.transactions.findMany({
     where: eq(transactions.userId, userId),
+    orderBy: [desc(transactions.occurredAt)],
+    limit,
+    with: { category: true, financialAccount: true },
+  });
+  return rows.map((r) => mapWithCategory(userId, r));
+}
+
+export async function getRecentTransactionsForAccount(
+  financialAccountId: string,
+  limit = 35,
+): Promise<TransactionWithCategory[]> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return [];
+  }
+  if (!z.string().uuid().safeParse(financialAccountId).success) {
+    return [];
+  }
+  const db = getDb();
+  const rows = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      eq(transactions.financialAccountId, financialAccountId),
+    ),
     orderBy: [desc(transactions.occurredAt)],
     limit,
     with: { category: true, financialAccount: true },
@@ -300,6 +353,7 @@ export async function computeMonthlyCashflowTrend(
     const key = `${od.getFullYear()}-${String(od.getMonth() + 1).padStart(2, "0")}`;
     const b = buckets.get(key);
     if (!b) continue;
+    if (row.reducesCreditBalance) continue;
     if (tx.kind === "income") {
       b.incomeMinor += tx.amountCents;
     } else {

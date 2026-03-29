@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import {
   computeDashboardOverviewByCurrency,
-  computeTransactionBuckets,
+  mergeTransactionBucketsWithAccountOpenings,
 } from "@/app/actions/dashboard-overview";
 import {
   computeMonthlyCashflowTrend,
@@ -20,8 +20,15 @@ import {
 } from "@/db/schema";
 import { RECURRING_FREQUENCY_LABELS } from "@/lib/recurring-expense-labels";
 import type { RecurringFrequencyKind } from "@/lib/recurring-expense-labels";
+import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
+import {
+  normalizeLendingPaymentRow,
+  normalizeLendingRow,
+} from "@/lib/lending-crypto";
 import { monthBounds, totalsByCurrency, type FiatCurrency } from "@/lib/money";
 import { SUPPORTED_CURRENCIES } from "@/lib/money";
+import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { decryptTransactionPayload } from "@/lib/transaction-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
@@ -93,7 +100,7 @@ export async function buildFinanceExportXlsxBuffer(
     lendingRows,
   ] = await Promise.all([
     computeDashboardOverviewByCurrency(userId),
-    computeTransactionBuckets(userId),
+    mergeTransactionBucketsWithAccountOpenings(userId),
     computeTransactionsForMonthRange(userId, monthStart, monthEnd),
     computeMonthlyCashflowTrend(userId, "USD", 6),
     computeMonthlyCashflowTrend(userId, "PHP", 6),
@@ -147,13 +154,14 @@ export async function buildFinanceExportXlsxBuffer(
       Metric: "Assets (from activity)",
       USD: minorToMajor(usd.assetsFromActivityMinor),
       PHP: minorToMajor(php.assetsFromActivityMinor),
-      Notes: "Positive per-account nets + lending receivables",
+      Notes: "Per-account transaction nets + starting balances + lending receivables",
     },
     {
       Metric: "Liabilities (from activity)",
       USD: minorToMajor(usd.liabilitiesFromActivityMinor),
       PHP: minorToMajor(php.liabilitiesFromActivityMinor),
-      Notes: "Negative per-account nets + lending payables",
+      Notes:
+        "Credit card utilization + other nets + lending payables (see breakdown rows)",
     },
     {
       Metric: "Net position (assets − liabilities)",
@@ -163,7 +171,20 @@ export async function buildFinanceExportXlsxBuffer(
       PHP: minorToMajor(
         php.assetsFromActivityMinor - php.liabilitiesFromActivityMinor,
       ),
-      Notes: "Transactions + lending combined",
+      Notes: "Includes credit utilization and lending",
+    },
+    { Metric: "", USD: "", PHP: "", Notes: "" },
+    {
+      Metric: "— Credit cards (subset of liabilities) —",
+      USD: "",
+      PHP: "",
+      Notes: "",
+    },
+    {
+      Metric: "Credit card balances owed (in liabilities total)",
+      USD: minorToMajor(usd.creditCardOutstandingMinor),
+      PHP: minorToMajor(php.creditCardOutstandingMinor),
+      Notes: "Cards with limit set; utilization matches Accounts page",
     },
     { Metric: "", USD: "", PHP: "", Notes: "" },
     {
@@ -278,12 +299,13 @@ export async function buildFinanceExportXlsxBuffer(
 
   const activityRows = Array.from(buckets.values())
     .map((b) => {
-      const net = b.income - b.expense;
+      const net = b.income - b.expense + b.openingMinor;
       return {
         Account: b.accountName,
         Currency: b.currency,
         Income: minorToMajor(b.income),
         Expense: minorToMajor(b.expense),
+        "Starting balance": minorToMajor(b.openingMinor),
         Net: minorToMajor(net),
         "Counts toward":
           net >= 0 ? "Assets (from activity)" : "Liabilities (from activity)",
@@ -319,8 +341,11 @@ export async function buildFinanceExportXlsxBuffer(
       Kind: tx.kind,
       Amount: tx.amountCents / 100,
       Currency: tx.currency,
+      "Card bill payment": raw.reducesCreditBalance ? "yes" : "",
       Category: category?.name ?? "",
-      Account: financialAccount?.name ?? "",
+      Account: financialAccount
+        ? decryptFinancePlaintext(userId, financialAccount.name)
+        : "",
     };
   });
   appendSheet(wb, "Transactions", transactionExport);
@@ -338,8 +363,11 @@ export async function buildFinanceExportXlsxBuffer(
     wb,
     "Accounts",
     acctRows.map((a) => ({
-      Name: a.name,
+      Name: decryptFinancePlaintext(userId, a.name),
       Type: a.type,
+      "Starting balance":
+        a.openingBalanceCents != null ? a.openingBalanceCents / 100 : "",
+      "Starting balance currency": a.openingBalanceCurrency ?? "",
     })),
   );
 
@@ -357,10 +385,14 @@ export async function buildFinanceExportXlsxBuffer(
       }
       return {
         Date: isoDate(new Date(rest.occurredAt)),
-        Amount: rest.amountCents / 100,
+        Amount:
+          transferAmountCentsFromRow(userId, {
+            amountCents: rest.amountCents,
+            payload,
+          }) / 100,
         Currency: rest.currency,
-        From: fromAccount.name,
-        To: toAccount.name,
+        From: decryptFinancePlaintext(userId, fromAccount.name),
+        To: decryptFinancePlaintext(userId, toAccount.name),
         Description: description,
       };
     })
@@ -371,20 +403,30 @@ export async function buildFinanceExportXlsxBuffer(
     wb,
     "Recurring",
     recurringRows.map((r) => ({
-      Name: r.name,
+      Name: decryptFinancePlaintext(userId, r.name),
       Kind: r.kind,
-      "Amount (fixed)":
-        r.amountCents != null ? r.amountCents / 100 : "",
+      "Amount (fixed)": (() => {
+        const a = resolveRecurringAmountCents(userId, r);
+        return a != null ? a / 100 : "";
+      })(),
       "Variable amount": r.amountVariable ? "Yes" : "No",
       Currency: r.currency,
       Schedule: recurringScheduleText(r),
-      Account: r.financialAccount?.name ?? "",
+      Account: r.financialAccount
+        ? decryptFinancePlaintext(userId, r.financialAccount.name)
+        : "",
       Category: r.category?.name ?? "",
+      "Card bill payment": r.creditPaydown ? "Yes" : "No",
     })),
   );
 
-  const lendingSummary = lendingRows.map((L) => {
-    const paid = L.payments.reduce((s, p) => s + p.amountCents, 0);
+  const lendingSummary = lendingRows.map((raw) => {
+    const { payments, ...lr } = raw;
+    const L = normalizeLendingRow(userId, lr);
+    const paid = payments.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
     const remaining = Math.max(0, L.principalCents - paid);
     return {
       Counterparty: L.counterpartyName,
@@ -401,15 +443,18 @@ export async function buildFinanceExportXlsxBuffer(
   appendSheet(wb, "Lending", lendingSummary);
 
   const paymentLines: Record<string, string | number>[] = [];
-  for (const L of lendingRows) {
-    for (const p of L.payments) {
+  for (const raw of lendingRows) {
+    const { payments, ...lr } = raw;
+    const L = normalizeLendingRow(userId, lr);
+    for (const p of payments) {
+      const np = normalizeLendingPaymentRow(userId, p);
       paymentLines.push({
         Counterparty: L.counterpartyName,
         "Loan kind": L.kind,
-        Amount: p.amountCents / 100,
+        Amount: np.amountCents / 100,
         Currency: L.currency,
-        "Paid date": isoDate(new Date(p.paidAt)),
-        Note: p.note ?? "",
+        "Paid date": isoDate(new Date(np.paidAt)),
+        Note: np.note ?? "",
       });
     }
   }
@@ -448,7 +493,7 @@ async function dbQueryAccounts(userId: string) {
   const db = getDb();
   return db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
-    orderBy: [asc(financialAccounts.type), asc(financialAccounts.name)],
+    orderBy: [asc(financialAccounts.type), asc(financialAccounts.createdAt)],
   });
 }
 
@@ -465,7 +510,7 @@ async function dbQueryRecurring(userId: string) {
   const db = getDb();
   return db.query.recurringExpenses.findMany({
     where: eq(recurringExpenses.userId, userId),
-    orderBy: [asc(recurringExpenses.kind), asc(recurringExpenses.name)],
+    orderBy: [asc(recurringExpenses.kind), asc(recurringExpenses.createdAt)],
     with: { category: true, financialAccount: true },
   });
 }

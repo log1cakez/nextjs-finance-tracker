@@ -6,6 +6,7 @@ import {
   updateDisplayName,
   type UpdateNameState,
 } from "@/app/actions/account-profile";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: UpdateNameState = {};
 
@@ -56,6 +57,9 @@ export function UpdateNameForm({ initialName }: { initialName: string }) {
           defaultValue={initialName}
           autoComplete="name"
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+          onBlur={(e) => {
+            e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+          }}
         />
       </label>
       <button

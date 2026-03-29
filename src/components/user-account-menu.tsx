@@ -76,12 +76,7 @@ export function UserAccountMenu({
           >
             Account
           </Link>
-          <div
-            role="menuitem"
-            className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800"
-          >
-            <ExportExcelButton variant="menu" />
-          </div>
+          <ExportExcelButton variant="menu" />
           <form action={signOutAction} className="border-t border-zinc-100 dark:border-zinc-800">
             <button
               type="submit"

@@ -57,6 +57,55 @@
       "when": 1774701000000,
       "tag": "0007_credit_statement_payment_days",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774702000000,
+      "tag": "0008_finance_at_rest",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774703000000,
+      "tag": "0009_recurring_amount_payload",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1774704000000,
+      "tag": "0010_credit_paydown",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774705000000,
+      "tag": "0011_category_definitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774706000000,
+      "tag": "0012_financial_account_ewallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1774707000000,
+      "tag": "0013_financial_account_opening_balance",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774708000000,
+      "tag": "0014_user_calendar_feed_token",
+      "breakpoints": true
     }
   ]
 }

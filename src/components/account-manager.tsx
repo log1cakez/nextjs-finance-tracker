@@ -9,6 +9,7 @@ import {
   type FinancialAccountWithUsage,
   type UpdateCreditActionState,
 } from "@/app/actions/financial-accounts";
+import { AccountTransactionLogModal } from "@/components/recent-transactions-log-modal";
 import {
   FINANCE_ACCOUNT_LABELS,
   FINANCE_ACCOUNT_TYPE_ORDER,
@@ -19,6 +20,7 @@ import {
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: FinancialAccountActionState = {};
 const creditUpdateInitial: UpdateCreditActionState = {};
@@ -34,6 +36,34 @@ function ordinalDay(n: number): string {
   if (j === 2 && k !== 12) return `${n}nd`;
   if (j === 3 && k !== 13) return `${n}rd`;
   return `${n}th`;
+}
+
+function BankActivityLine({
+  netCents,
+  currency,
+  foreignOpening,
+}: {
+  netCents: number;
+  currency: FiatCurrency;
+  foreignOpening?: { cents: number; currency: FiatCurrency };
+}) {
+  return (
+    <p className="mt-2 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
+      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+        Balance ({currency})
+      </span>
+      : {formatMoney(netCents, currency)} — starting balance you set (if any)
+      plus net from transactions, recurring logs, and transfers in this
+      currency (navbar preference).
+      {foreignOpening ? (
+        <span className="mt-1 block text-zinc-500 dark:text-zinc-400">
+          Starting balance also recorded as{" "}
+          {formatMoney(foreignOpening.cents, foreignOpening.currency)}. Switch
+          the currency in the navbar to include that amount in the total above.
+        </span>
+      ) : null}
+    </p>
+  );
 }
 
 function CreditScheduleLine({
@@ -89,8 +119,9 @@ function CreditUsageBar({
         />
       </div>
       <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-        Charges and recurring logs in {currency} count toward usage. Transfers to this card
-        reduce the balance; transfers from it increase it.
+        New charges (expenses) in {currency} increase usage. Card bill payments marked when
+        you log, transfers to this card, and income on the card reduce it; transfers from it
+        increase it.
       </p>
     </div>
   );
@@ -278,6 +309,9 @@ export function AccountManager({
               required
               className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="Chase Checking, Visa, Coinbase…"
+              onBlur={(e) => {
+                e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+              }}
             />
           </label>
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 sm:w-52">
@@ -336,6 +370,34 @@ export function AccountManager({
               </label>
             </div>
           </fieldset>
+        ) : null}
+
+        {accountType !== "bank" || bankKind === "debit" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Starting balance (optional)
+              <input
+                name="heldAmount"
+                inputMode="decimal"
+                className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                placeholder="How much this account holds today"
+              />
+            </label>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Balance currency
+              <select
+                name="heldCurrency"
+                defaultValue={defaultCurrency}
+                className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         ) : null}
 
         {accountType === "bank" && bankKind === "credit" ? (
@@ -463,6 +525,14 @@ export function AccountManager({
                             currency={a.creditLimitCurrency as FiatCurrency}
                           />
                         ) : null}
+                        {typeof a.activityNetCents === "number" &&
+                        a.activityCurrency ? (
+                          <BankActivityLine
+                            netCents={a.activityNetCents}
+                            currency={a.activityCurrency}
+                            foreignOpening={a.openingBalanceForeign}
+                          />
+                        ) : null}
                         {a.type === "bank" &&
                         a.bankKind === "credit" &&
                         (a.creditStatementDayOfMonth != null ||
@@ -474,15 +544,21 @@ export function AccountManager({
                         ) : null}
                         <BankCreditEditForm account={a} />
                       </div>
-                      <form action={deleteFinancialAccount} className="shrink-0">
-                        <input type="hidden" name="id" value={a.id} />
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
-                        >
-                          Remove
-                        </button>
-                      </form>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <AccountTransactionLogModal
+                          accountId={a.id}
+                          accountName={a.name}
+                        />
+                        <form action={deleteFinancialAccount}>
+                          <input type="hidden" name="id" value={a.id} />
+                          <button
+                            type="submit"
+                            className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </div>
                     </div>
                   </li>
                 ))}

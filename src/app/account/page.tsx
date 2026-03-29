@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { DeleteAccountForm } from "@/components/delete-account-form";
 import { UpdateNameForm } from "@/components/update-name-form";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
@@ -44,6 +45,21 @@ export default async function AccountPage() {
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-400">
           Password sign-in is not enabled for this account (for example, you
           may use Google). Password changes apply only to email login.
+        </div>
+      )}
+
+      {canChangePassword ? (
+        <DeleteAccountForm />
+      ) : (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-400">
+          <h2 className="mb-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">
+            Delete account
+          </h2>
+          <p className="leading-relaxed">
+            Accounts without a password (for example, Google-only sign-in)
+            cannot be deleted from this screen. Add email and password login
+            first, or contact support if you need the account removed.
+          </p>
         </div>
       )}
 

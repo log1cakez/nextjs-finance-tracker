@@ -15,6 +15,7 @@ import { getDb } from "../src/db/index";
 import {
   accountTransfers,
   categories,
+  categoryDefinitions,
   financialAccounts,
   lendingPayments,
   lendings,
@@ -22,12 +23,43 @@ import {
   transactions,
   users,
 } from "../src/db/schema";
+import {
+  encryptFinanceObject,
+  encryptFinancePlaintext,
+} from "../src/lib/finance-field-crypto";
+import { normalizeCategoryNameKey } from "../src/lib/category-name";
 import { encryptTransactionPayload } from "../src/lib/transaction-crypto";
 
 config({ path: ".env.local" });
 config({ path: ".env" });
 
 const SEED_TAG = "(seed)";
+
+function seedEncName(userId: string, plain: string): string {
+  if (!process.env.TRANSACTIONS_ENCRYPTION_KEY?.trim()) {
+    return plain;
+  }
+  return encryptFinancePlaintext(userId, plain);
+}
+
+function seedRecurringAmountFields(
+  userId: string,
+  fixedAmountCents: number,
+  amountVariable: boolean,
+): { amountCents: number | null; amountPayload: string | null } {
+  if (amountVariable) {
+    return { amountCents: null, amountPayload: null };
+  }
+  if (!process.env.TRANSACTIONS_ENCRYPTION_KEY?.trim()) {
+    return { amountCents: fixedAmountCents, amountPayload: null };
+  }
+  return {
+    amountCents: null,
+    amountPayload: encryptFinanceObject(userId, {
+      amountCents: fixedAmountCents,
+    }),
+  };
+}
 
 function txnFields(
   userId: string,
@@ -101,35 +133,73 @@ async function main() {
     .values([
       {
         userId,
-        name: `Checking ${SEED_TAG}`,
+        name: seedEncName(userId, `Checking ${SEED_TAG}`),
         type: "bank",
         bankKind: "debit",
       },
       {
         userId,
-        name: `Savings ${SEED_TAG}`,
+        name: seedEncName(userId, `Savings ${SEED_TAG}`),
         type: "bank",
         bankKind: "debit",
       },
       {
         userId,
-        name: `Cash wallet ${SEED_TAG}`,
+        name: seedEncName(userId, `Cash wallet ${SEED_TAG}`),
         type: "cash",
       },
     ])
     .returning({ id: financialAccounts.id });
 
-  const catRows = await db
-    .insert(categories)
-    .values([
-      { userId, name: `Salary ${SEED_TAG}`, kind: "income" },
-      { userId, name: `Freelance ${SEED_TAG}`, kind: "income" },
-      { userId, name: `Groceries ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Rent ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Utilities ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Dining ${SEED_TAG}`, kind: "expense" },
-    ])
-    .returning({ id: categories.id, kind: categories.kind });
+  const catSpecs = [
+    { name: `Salary ${SEED_TAG}`, kind: "income" as const },
+    { name: `Freelance ${SEED_TAG}`, kind: "income" as const },
+    { name: `Groceries ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Rent ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Utilities ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Dining ${SEED_TAG}`, kind: "expense" as const },
+  ];
+  const catRows: { id: string; kind: "income" | "expense" }[] = [];
+  for (const spec of catSpecs) {
+    const nameKey = normalizeCategoryNameKey(spec.name);
+    let def = await db.query.categoryDefinitions.findFirst({
+      where: and(
+        eq(categoryDefinitions.nameKey, nameKey),
+        eq(categoryDefinitions.kind, spec.kind),
+      ),
+    });
+    if (!def) {
+      await db
+        .insert(categoryDefinitions)
+        .values({
+          name: spec.name,
+          nameKey,
+          kind: spec.kind,
+        })
+        .onConflictDoNothing({
+          target: [categoryDefinitions.nameKey, categoryDefinitions.kind],
+        });
+      def = await db.query.categoryDefinitions.findFirst({
+        where: and(
+          eq(categoryDefinitions.nameKey, nameKey),
+          eq(categoryDefinitions.kind, spec.kind),
+        ),
+      });
+    }
+    if (!def) {
+      throw new Error(`Failed to resolve category definition for ${spec.name}`);
+    }
+    const [row] = await db
+      .insert(categories)
+      .values({
+        userId,
+        definitionId: def.id,
+        name: def.name,
+        kind: spec.kind,
+      })
+      .returning({ id: categories.id, kind: categories.kind });
+    if (row) catRows.push(row);
+  }
 
   const byKind = (k: "income" | "expense") =>
     catRows.filter((c) => c.kind === k).map((c) => c.id);
@@ -348,8 +418,8 @@ async function main() {
     {
       userId,
       kind: "expense",
-      name: `Streaming subs ${SEED_TAG}`,
-      amountCents: 15_99,
+      name: seedEncName(userId, `Streaming subs ${SEED_TAG}`),
+      ...seedRecurringAmountFields(userId, 15_99, false),
       amountVariable: false,
       currency: "USD",
       categoryId: utilitiesId,
@@ -362,8 +432,8 @@ async function main() {
     {
       userId,
       kind: "expense",
-      name: `Gym membership ${SEED_TAG}`,
-      amountCents: 49_99,
+      name: seedEncName(userId, `Gym membership ${SEED_TAG}`),
+      ...seedRecurringAmountFields(userId, 49_99, false),
       amountVariable: false,
       currency: "USD",
       categoryId: utilitiesId,
@@ -376,8 +446,8 @@ async function main() {
     {
       userId,
       kind: "income",
-      name: `Monthly retainer ${SEED_TAG}`,
-      amountCents: 2_000_00,
+      name: seedEncName(userId, `Monthly retainer ${SEED_TAG}`),
+      ...seedRecurringAmountFields(userId, 2_000_00, false),
       amountVariable: false,
       currency: "USD",
       categoryId: freelanceId,
@@ -390,8 +460,8 @@ async function main() {
     {
       userId,
       kind: "expense",
-      name: `Credit card (variable) ${SEED_TAG}`,
-      amountCents: null,
+      name: seedEncName(userId, `Credit card (variable) ${SEED_TAG}`),
+      ...seedRecurringAmountFields(userId, 0, true),
       amountVariable: true,
       currency: "USD",
       categoryId: null,
@@ -403,38 +473,88 @@ async function main() {
     },
   ]);
 
+  const hasFinKey = Boolean(process.env.TRANSACTIONS_ENCRYPTION_KEY?.trim());
+
   const [_recvLoan, payLoan] = await db
     .insert(lendings)
-    .values([
-      {
-        userId,
-        counterpartyName: `Friend (receivable) ${SEED_TAG}`,
-        kind: "receivable",
-        principalCents: 350_00,
-        currency: "USD",
-        repaymentStyle: "lump_sum",
-        startedAt: daysAgo(45),
-        notes: "Short-term loan; track when they repay.",
-      },
-      {
-        userId,
-        counterpartyName: `Relative (payable) ${SEED_TAG}`,
-        kind: "payable",
-        principalCents: 1_200_00,
-        currency: "USD",
-        repaymentStyle: "installment",
-        startedAt: daysAgo(90),
-        notes: "Paying back in parts.",
-      },
-    ])
+    .values(
+      hasFinKey
+        ? [
+            {
+              userId,
+              financePayload: encryptFinanceObject(userId, {
+                counterpartyName: `Friend (receivable) ${SEED_TAG}`,
+                principalCents: 350_00,
+                notes: "Short-term loan; track when they repay.",
+              }),
+              counterpartyName: null,
+              principalCents: null,
+              notes: null,
+              kind: "receivable" as const,
+              currency: "USD" as const,
+              repaymentStyle: "lump_sum" as const,
+              startedAt: daysAgo(45),
+            },
+            {
+              userId,
+              financePayload: encryptFinanceObject(userId, {
+                counterpartyName: `Relative (payable) ${SEED_TAG}`,
+                principalCents: 1_200_00,
+                notes: "Paying back in parts.",
+              }),
+              counterpartyName: null,
+              principalCents: null,
+              notes: null,
+              kind: "payable" as const,
+              currency: "USD" as const,
+              repaymentStyle: "installment" as const,
+              startedAt: daysAgo(90),
+            },
+          ]
+        : [
+            {
+              userId,
+              counterpartyName: `Friend (receivable) ${SEED_TAG}`,
+              kind: "receivable",
+              principalCents: 350_00,
+              currency: "USD",
+              repaymentStyle: "lump_sum",
+              startedAt: daysAgo(45),
+              notes: "Short-term loan; track when they repay.",
+            },
+            {
+              userId,
+              counterpartyName: `Relative (payable) ${SEED_TAG}`,
+              kind: "payable",
+              principalCents: 1_200_00,
+              currency: "USD",
+              repaymentStyle: "installment",
+              startedAt: daysAgo(90),
+              notes: "Paying back in parts.",
+            },
+          ],
+    )
     .returning({ id: lendings.id });
 
-  await db.insert(lendingPayments).values({
-    lendingId: payLoan.id,
-    amountCents: 250_00,
-    paidAt: daysAgo(14),
-    note: "Installment 1",
-  });
+  if (hasFinKey) {
+    await db.insert(lendingPayments).values({
+      lendingId: payLoan.id,
+      financePayload: encryptFinanceObject(userId, {
+        amountCents: 250_00,
+        note: "Installment 1",
+      }),
+      amountCents: null,
+      note: null,
+      paidAt: daysAgo(14),
+    });
+  } else {
+    await db.insert(lendingPayments).values({
+      lendingId: payLoan.id,
+      amountCents: 250_00,
+      paidAt: daysAgo(14),
+      note: "Installment 1",
+    });
+  }
 
   if (process.env.TRANSACTIONS_ENCRYPTION_KEY?.trim()) {
     const transferPayload = encryptTransactionPayload(userId, {
@@ -445,7 +565,7 @@ async function main() {
       userId,
       fromFinancialAccountId: checking.id,
       toFinancialAccountId: savings.id,
-      amountCents: 500_00,
+      amountCents: null,
       currency: "USD",
       payload: transferPayload,
       occurredAt: daysAgo(8),

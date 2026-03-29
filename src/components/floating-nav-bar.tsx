@@ -31,7 +31,7 @@ export function FloatingNavBar({
               prefetch={item.href === "/" ? false : undefined}
               className={`shrink-0 whitespace-nowrap rounded-xl px-2.5 py-2.5 text-xs font-medium transition-colors min-[400px]:px-3 min-[400px]:text-sm sm:py-2 ${
                 active
-                  ? "bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md shadow-amber-900/25 dark:from-amber-500 dark:to-amber-600 dark:text-zinc-950 dark:shadow-amber-950/35"
+                  ? "bg-slate-800 text-white shadow-sm shadow-slate-900/15 dark:bg-slate-100 dark:text-slate-900 dark:shadow-slate-950/25"
                   : "text-zinc-600 hover:bg-amber-500/10 hover:text-amber-900 dark:text-zinc-400 dark:hover:bg-amber-500/10 dark:hover:text-amber-200"
               }`}
             >

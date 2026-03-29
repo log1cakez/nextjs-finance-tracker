@@ -8,6 +8,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -21,6 +22,7 @@ export const financialAccountType = pgEnum("financial_account_type", [
   "forex",
   "business",
   "cash",
+  "ewallet",
   "other",
 ]);
 
@@ -53,6 +55,8 @@ export const users = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   passwordHash: text("password_hash"),
+  /** SHA-256 hex of secret token for optional iCal-style due-date feed. */
+  calendarFeedTokenHash: text("calendar_feed_token_hash"),
 });
 
 export const accounts = pgTable(
@@ -131,15 +135,48 @@ export const authenticators = pgTable(
   }),
 );
 
-export const categories = pgTable("categories", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  kind: transactionKind("kind").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+/**
+ * Shared category labels (one row per normalized name + kind). User rows in `categories`
+ * reference a definition so identical names across users reuse the same definition.
+ */
+export const categoryDefinitions = pgTable(
+  "category_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Display label (canonical casing from first creator or adopter). */
+    name: text("name").notNull(),
+    /** `lower(trim(name))` with collapsed spaces — unique with `kind`. */
+    nameKey: text("name_key").notNull(),
+    kind: transactionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    nameKeyKindUq: uniqueIndex("category_definitions_name_key_kind").on(t.nameKey, t.kind),
+  }),
+);
+
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    definitionId: uuid("definition_id")
+      .notNull()
+      .references(() => categoryDefinitions.id, { onDelete: "restrict" }),
+    /** Denormalized from the definition for queries and display. */
+    name: text("name").notNull(),
+    kind: transactionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userDefinitionUq: uniqueIndex("categories_user_definition_idx").on(
+      t.userId,
+      t.definitionId,
+    ),
+  }),
+);
 
 /** User-defined accounts: banks, crypto, forex, business, etc. (not OAuth.) */
 export const financialAccounts = pgTable("financial_accounts", {
@@ -163,6 +200,12 @@ export const financialAccounts = pgTable("financial_accounts", {
   creditStatementDayOfMonth: integer("credit_statement_day_of_month"),
   /** Payment due day of month (1–31); credit accounts only. */
   creditPaymentDueDayOfMonth: integer("credit_payment_due_day_of_month"),
+  /**
+   * Cash held when you started tracking (debit bank, e-wallet, crypto, etc.).
+   * Not used for credit cards (use credit opening balance owed instead).
+   */
+  openingBalanceCents: integer("opening_balance_cents"),
+  openingBalanceCurrency: transactionCurrency("opening_balance_currency"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -179,6 +222,8 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   name: text("name").notNull(),
   /** Null when `amountVariable` is true (e.g. credit card — amount entered when logging). */
   amountCents: integer("amount_cents"),
+  /** Encrypted JSON `{ amountCents }` for fixed templates; when set, `amount_cents` is null. */
+  amountPayload: text("amount_payload"),
   amountVariable: boolean("amount_variable").notNull().default(false),
   currency: transactionCurrency("currency").notNull().default("USD"),
   categoryId: uuid("category_id").references(() => categories.id, {
@@ -187,6 +232,8 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   financialAccountId: uuid("financial_account_id")
     .notNull()
     .references(() => financialAccounts.id, { onDelete: "restrict" }),
+  /** Expense on credit card: logs reduce balance owed (payment), not a new charge. */
+  creditPaydown: boolean("credit_paydown").notNull().default(false),
   frequency: recurringFrequency("frequency").notNull(),
   dueDayOfMonth: integer("due_day_of_month"),
   /** Second calendar day for `semimonthly` (e.g. second pay run); null otherwise. */
@@ -207,7 +254,8 @@ export const accountTransfers = pgTable("account_transfers", {
   toFinancialAccountId: uuid("to_financial_account_id")
     .notNull()
     .references(() => financialAccounts.id, { onDelete: "restrict" }),
-  amountCents: integer("amount_cents").notNull(),
+  /** Null for new rows; amount lives only in encrypted `payload`. Legacy rows may still set this. */
+  amountCents: integer("amount_cents"),
   currency: transactionCurrency("currency").notNull().default("USD"),
   payload: text("payload").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
@@ -223,9 +271,16 @@ export const lendings = pgTable("lendings", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  counterpartyName: text("counterparty_name").notNull(),
+  /**
+   * Encrypted JSON at rest (`encryptFinanceObject`): counterpartyName, principalCents, notes.
+   * When set, legacy plaintext columns are null.
+   */
+  financePayload: text("finance_payload"),
+  /** Legacy plaintext; prefer `financePayload` for new rows. */
+  counterpartyName: text("counterparty_name"),
   kind: lendingKind("kind").notNull(),
-  principalCents: integer("principal_cents").notNull(),
+  /** Legacy plaintext principal; null when using `financePayload`. */
+  principalCents: integer("principal_cents"),
   currency: transactionCurrency("currency").notNull().default("USD"),
   repaymentStyle: lendingRepaymentStyle("repayment_style")
     .notNull()
@@ -240,7 +295,9 @@ export const lendingPayments = pgTable("lending_payments", {
   lendingId: uuid("lending_id")
     .notNull()
     .references(() => lendings.id, { onDelete: "cascade" }),
-  amountCents: integer("amount_cents").notNull(),
+  /** Encrypted JSON: amountCents, note. When set, legacy amount/note are null. */
+  financePayload: text("finance_payload"),
+  amountCents: integer("amount_cents"),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -265,6 +322,11 @@ export const transactions = pgTable("transactions", {
     () => financialAccounts.id,
     { onDelete: "restrict" },
   ),
+  /**
+   * When true (expense on a credit card): reduces utilization / balance owed
+   * (bill payment), instead of increasing it like a purchase.
+   */
+  reducesCreditBalance: boolean("reduces_credit_balance").notNull().default(false),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -293,8 +355,19 @@ export const authenticatorsRelations = relations(authenticators, ({ one }) => ({
   user: one(users, { fields: [authenticators.userId], references: [users.id] }),
 }));
 
+export const categoryDefinitionsRelations = relations(
+  categoryDefinitions,
+  ({ many }) => ({
+    categories: many(categories),
+  }),
+);
+
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   user: one(users, { fields: [categories.userId], references: [users.id] }),
+  definition: one(categoryDefinitions, {
+    fields: [categories.definitionId],
+    references: [categoryDefinitions.id],
+  }),
   transactions: many(transactions),
   recurringExpenses: many(recurringExpenses),
 }));
@@ -386,6 +459,7 @@ export const schema = {
   passwordResetOtps,
   authenticators,
   categories,
+  categoryDefinitions,
   financialAccounts,
   recurringExpenses,
   accountTransfers,
@@ -397,6 +471,7 @@ export const schema = {
   sessionsRelations,
   authenticatorsRelations,
   categoriesRelations,
+  categoryDefinitionsRelations,
   financialAccountsRelations,
   recurringExpensesRelations,
   accountTransfersRelations,

@@ -43,7 +43,12 @@ export function monthBounds(d = new Date()): { start: Date; end: Date } {
 }
 
 export function totalsByCurrency(
-  txs: { kind: "income" | "expense"; amountCents: number; currency: FiatCurrency }[],
+  txs: {
+    kind: "income" | "expense";
+    amountCents: number;
+    currency: FiatCurrency;
+    reducesCreditBalance?: boolean;
+  }[],
 ): Record<FiatCurrency, { income: number; expense: number }> {
   const out: Record<FiatCurrency, { income: number; expense: number }> =
     {
@@ -51,6 +56,7 @@ export function totalsByCurrency(
       PHP: { income: 0, expense: 0 },
     };
   for (const t of txs) {
+    if (t.kind === "expense" && t.reducesCreditBalance) continue;
     const c = t.currency;
     if (t.kind === "income") {
       out[c].income += t.amountCents;

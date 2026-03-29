@@ -12,12 +12,19 @@ import {
   transactions,
 } from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
 import { getPreferredCurrency } from "@/lib/preferences";
+import {
+  decryptFinancePlaintext,
+  encryptFinanceObject,
+  encryptFinancePlaintext,
+} from "@/lib/finance-field-crypto";
+import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import {
   RECURRING_FREQUENCIES,
   isSemimonthlyFrequency,
@@ -199,6 +206,30 @@ export async function createRecurringExpense(
     return { error: "Pick a valid account" };
   }
 
+  if (
+    fin.bankKind === "credit" &&
+    fin.creditLimitCurrency != null &&
+    parsed.data.currency !== fin.creditLimitCurrency
+  ) {
+    return {
+      error: `For this credit card, use template currency ${fin.creditLimitCurrency} (same as the card’s limit) so recurring logs update utilization on Accounts.`,
+    };
+  }
+
+  const creditPaydownRaw = formData.get("creditPaydown");
+  const creditPaydown =
+    creditPaydownRaw === "on" ||
+    creditPaydownRaw === "true" ||
+    creditPaydownRaw === "1";
+  if (creditPaydown) {
+    if (parsed.data.kind !== "expense" || fin.bankKind !== "credit") {
+      return {
+        error:
+          "“Card bill payment” only applies when the template is an expense on a credit card account.",
+      };
+    }
+  }
+
   let categoryId: string | null = null;
   if (parsed.data.categoryId) {
     const cat = await db.query.categories.findFirst({
@@ -215,15 +246,60 @@ export async function createRecurringExpense(
     categoryId = cat.id;
   }
 
+  const templateName = formatTypedLabel(parsed.data.name.trim());
+  if (!templateName) {
+    return { error: "Name is required" };
+  }
+
+  let encName: string;
+  try {
+    encName = encryptFinancePlaintext(userId, templateName);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY to save recurring templates with encrypted names.",
+      };
+    }
+    return { error: "Could not encrypt template name. Try again." };
+  }
+
+  let amountPayload: string | null = null;
+  let amountCentsCol: number | null = null;
+  if (!parsed.data.amountVariable) {
+    const m = minor;
+    if (m === null) {
+      return { error: "Enter a valid positive amount" };
+    }
+    try {
+      amountPayload = encryptFinanceObject(userId, { amountCents: m });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+        return {
+          error:
+            "Set TRANSACTIONS_ENCRYPTION_KEY to encrypt recurring amounts.",
+        };
+      }
+      return { error: "Could not encrypt template amount. Try again." };
+    }
+  } else {
+    amountPayload = null;
+    amountCentsCol = null;
+  }
+
   await db.insert(recurringExpenses).values({
     userId,
     kind: parsed.data.kind,
-    name: parsed.data.name.trim(),
-    amountCents: minor,
+    name: encName,
+    amountCents: amountCentsCol,
+    amountPayload,
     amountVariable: parsed.data.amountVariable,
     currency: parsed.data.currency,
     categoryId,
     financialAccountId: parsed.data.financialAccountId,
+    creditPaydown,
     frequency,
     dueDayOfMonth,
     secondDueDayOfMonth,
@@ -284,8 +360,37 @@ export async function logRecurringExpense(formData: FormData) {
     redirect("/recurring?error=" + encodeURIComponent("Not found"));
   }
 
+  const finAccount = await db.query.financialAccounts.findFirst({
+    where: and(
+      eq(financialAccounts.id, row.financialAccountId),
+      eq(financialAccounts.userId, userId),
+    ),
+    columns: {
+      id: true,
+      bankKind: true,
+      creditLimitCurrency: true,
+    },
+  });
+  const paydown =
+    row.kind === "expense" &&
+    row.creditPaydown === true &&
+    finAccount?.bankKind === "credit";
+  if (
+    finAccount?.bankKind === "credit" &&
+    finAccount.creditLimitCurrency != null &&
+    row.currency !== finAccount.creditLimitCurrency
+  ) {
+    redirect(
+      "/recurring?error=" +
+        encodeURIComponent(
+          `This template is in ${row.currency} but the card’s limit is tracked in ${finAccount.creditLimitCurrency}. Edit the template currency or card settings so they match — then usage on Accounts will update correctly.`,
+        ),
+    );
+  }
+
+  const fixedTemplateAmount = resolveRecurringAmountCents(userId, row);
   const needsAmountAtLog =
-    row.amountVariable || row.amountCents == null;
+    row.amountVariable || fixedTemplateAmount == null;
   const amountStr = formString(formData, "amount") ?? "";
   let amountMinor: number;
   if (needsAmountAtLog) {
@@ -298,19 +403,15 @@ export async function logRecurringExpense(formData: FormData) {
     }
     amountMinor = m;
   } else {
-    if (row.amountCents == null) {
-      redirect(
-        "/recurring?error=" +
-          encodeURIComponent("This template has no amount; enable variable amount or set a fixed amount."),
-      );
-    }
-    amountMinor = row.amountCents;
+    amountMinor = fixedTemplateAmount;
   }
+
+  const templateName = decryptFinancePlaintext(userId, row.name);
 
   let payload: string;
   try {
     payload = encryptTransactionPayload(userId, {
-      description: row.name,
+      description: templateName,
       amountCents: amountMinor,
     });
   } catch (e) {
@@ -335,6 +436,7 @@ export async function logRecurringExpense(formData: FormData) {
     kind: row.kind,
     categoryId: row.categoryId,
     financialAccountId: row.financialAccountId,
+    reducesCreditBalance: paydown,
     occurredAt,
   });
 
@@ -355,13 +457,24 @@ export async function getRecurringExpenses() {
     return [];
   }
   const db = getDb();
-  return db.query.recurringExpenses.findMany({
+  const rows = await db.query.recurringExpenses.findMany({
     where: eq(recurringExpenses.userId, userId),
     orderBy: [
       asc(recurringExpenses.kind),
       asc(recurringExpenses.frequency),
-      asc(recurringExpenses.name),
+      asc(recurringExpenses.createdAt),
     ],
     with: { category: true, financialAccount: true },
   });
+  return rows.map((r) => ({
+    ...r,
+    name: decryptFinancePlaintext(userId, r.name),
+    amountCents: resolveRecurringAmountCents(userId, r),
+    financialAccount: r.financialAccount
+      ? {
+          ...r.financialAccount,
+          name: decryptFinancePlaintext(userId, r.financialAccount.name),
+        }
+      : null,
+  }));
 }

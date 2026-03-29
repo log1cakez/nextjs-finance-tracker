@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { AppShell } from "@/components/app-shell";
 import { ExtensionAttrCleanup } from "@/components/extension-attr-cleanup";
 import { ThemeProvider } from "@/components/theme-provider";
-import { APP_DESCRIPTION, APP_NAME } from "@/lib/brand";
+import { APP_DESCRIPTION, APP_PAGE_TITLE } from "@/lib/brand";
 import { getPreferredCurrency } from "@/lib/preferences";
 import "./globals.css";
 
@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: APP_NAME,
+  title: APP_PAGE_TITLE,
   description: APP_DESCRIPTION,
 };
 

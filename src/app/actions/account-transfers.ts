@@ -6,12 +6,15 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { accountTransfers, financialAccounts } from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
+import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
 import { getPreferredCurrency } from "@/lib/preferences";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import {
   decryptTransactionPayload,
   encryptTransactionPayload,
@@ -99,9 +102,12 @@ export async function createAccountTransfer(
     return { error: "Pick valid accounts" };
   }
 
-  const baseLabel = `Transfer: ${from.name} → ${to.name}`;
+  const baseLabel = `Transfer: ${decryptFinancePlaintext(userId, from.name)} → ${decryptFinancePlaintext(userId, to.name)}`;
   const note = parsed.data.note?.trim();
-  const description = note ? `${baseLabel} — ${note}` : baseLabel;
+  const noteFormatted = note ? formatTypedLabel(note) : "";
+  const description = noteFormatted
+    ? `${baseLabel} — ${noteFormatted}`
+    : baseLabel;
 
   let payload: string;
   try {
@@ -124,7 +130,7 @@ export async function createAccountTransfer(
     userId,
     fromFinancialAccountId: parsed.data.fromFinancialAccountId,
     toFinancialAccountId: parsed.data.toFinancialAccountId,
-    amountCents: minor,
+    amountCents: null,
     currency: parsed.data.currency,
     payload,
     occurredAt,
@@ -195,12 +201,21 @@ export async function getAccountTransfers(): Promise<TransferListItem[]> {
     }
     out.push({
       id: rest.id,
-      amountCents: rest.amountCents,
+      amountCents: transferAmountCentsFromRow(userId, {
+        amountCents: rest.amountCents,
+        payload,
+      }),
       currency: rest.currency,
       occurredAt: rest.occurredAt,
       description,
-      fromAccount,
-      toAccount,
+      fromAccount: {
+        ...fromAccount,
+        name: decryptFinancePlaintext(userId, fromAccount.name),
+      },
+      toAccount: {
+        ...toAccount,
+        name: decryptFinancePlaintext(userId, toAccount.name),
+      },
     });
   }
   return out;

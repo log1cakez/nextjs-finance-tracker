@@ -2,12 +2,13 @@ import { and, eq, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accountTransfers, transactions } from "@/db/schema";
 import type { FiatCurrency } from "@/lib/money";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 /**
  * Outstanding balance on a credit card (minor units), for one currency.
- * Expenses increase balance; income and transfers **to** the card decrease it.
- * Transfers **from** the card increase it (e.g. cash advance).
+ * Normal expenses increase balance; expenses flagged as card bill payments decrease it.
+ * Other income and transfers **to** the card decrease it; transfers **from** increase it.
  * Includes `openingBalanceCents` for debt before in-app tracking.
  */
 export async function computeCreditUsedCents(
@@ -28,8 +29,12 @@ export async function computeCreditUsedCents(
   for (const row of txs) {
     const tx = toDecryptedTransaction(userId, row);
     if (tx.currency !== limitCurrency) continue;
-    if (tx.kind === "expense") used += tx.amountCents;
-    else used -= tx.amountCents;
+    if (tx.kind === "expense") {
+      if (row.reducesCreditBalance) used -= tx.amountCents;
+      else used += tx.amountCents;
+    } else {
+      used -= tx.amountCents;
+    }
   }
 
   const transfers = await db.query.accountTransfers.findMany({
@@ -43,10 +48,11 @@ export async function computeCreditUsedCents(
   });
   for (const t of transfers) {
     if (t.currency !== limitCurrency) continue;
+    const amt = transferAmountCentsFromRow(userId, t);
     if (t.fromFinancialAccountId === financialAccountId) {
-      used += t.amountCents;
+      used += amt;
     } else {
-      used -= t.amountCents;
+      used -= amt;
     }
   }
 

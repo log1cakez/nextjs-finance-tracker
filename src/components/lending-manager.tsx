@@ -21,6 +21,7 @@ import {
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
+import { formatTypedBlock, formatTypedLabel } from "@/lib/typed-label-format";
 
 const createInitial: LendingActionState = {};
 const payInitial: LendingPaymentActionState = {};
@@ -90,6 +91,10 @@ function LendingPaymentForm({
           name="note"
           maxLength={500}
           className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim();
+            if (v) e.currentTarget.value = formatTypedLabel(v);
+          }}
         />
       </label>
       <button
@@ -338,6 +343,9 @@ export function LendingManager({
               maxLength={120}
               className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-0 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="e.g. Alex, Mom, Chase…"
+              onBlur={(e) => {
+                e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+              }}
             />
           </label>
 
@@ -399,6 +407,9 @@ export function LendingManager({
               maxLength={2000}
               className="mt-1.5 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-0 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="Terms, reminders…"
+              onBlur={(e) => {
+                e.currentTarget.value = formatTypedBlock(e.currentTarget.value);
+              }}
             />
           </label>
         </div>

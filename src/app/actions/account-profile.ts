@@ -6,6 +6,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const nameSchema = z.object({
   name: z
@@ -34,10 +35,15 @@ export async function updateDisplayName(
     return { error: msg };
   }
 
+  const displayName = formatTypedLabel(parsed.data.name);
+  if (!displayName) {
+    return { error: "Name is required" };
+  }
+
   const db = getDb();
   await db
     .update(users)
-    .set({ name: parsed.data.name })
+    .set({ name: displayName })
     .where(eq(users.id, session.user.id));
 
   revalidatePath("/", "layout");

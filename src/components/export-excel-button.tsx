@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Spinner } from "@/components/spinner";
 
 function parseContentDispositionFilename(cd: string | null): string | null {
   if (!cd) {
@@ -65,14 +66,15 @@ export function ExportExcelButton({
   }
 
   const baseMenu =
-    "block w-full px-3 py-3 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 disabled:opacity-50 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700";
+    "flex w-full items-center gap-2 px-3 py-3 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 disabled:opacity-50 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700";
   const baseInline =
-    "inline-flex min-h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900";
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900";
 
   return (
     <span className={variant === "inline" ? "inline-flex flex-col gap-1" : ""}>
       <button
         type="button"
+        role={variant === "menu" ? "menuitem" : undefined}
         disabled={busy}
         onClick={onExport}
         className={
@@ -81,7 +83,14 @@ export function ExportExcelButton({
             : `${baseInline} ${className}`.trim()
         }
       >
-        {busy ? "Preparing…" : "Export Excel (.xlsx)"}
+        {busy ? (
+          <>
+            <Spinner size="sm" decorative />
+            Preparing…
+          </>
+        ) : (
+          "Export Excel (.xlsx)"
+        )}
       </button>
       {error ? (
         <span className="text-xs text-rose-600 dark:text-rose-400">{error}</span>

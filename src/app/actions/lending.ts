@@ -5,6 +5,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { lendingPayments, lendings } from "@/db/schema";
+import { encryptFinanceObject } from "@/lib/finance-field-crypto";
+import {
+  normalizeLendingPaymentRow,
+  normalizeLendingRow,
+  type LendingPaymentRowNormalized,
+  type LendingRowNormalized,
+} from "@/lib/lending-crypto";
 import { getSessionUserId } from "@/lib/session";
 import {
   formatMoney,
@@ -13,6 +20,7 @@ import {
   type FiatCurrency,
 } from "@/lib/money";
 import { getPreferredCurrency } from "@/lib/preferences";
+import { formatTypedBlock, formatTypedLabel } from "@/lib/typed-label-format";
 
 const kindSchema = z.enum(["receivable", "payable"]);
 const styleSchema = z.enum(["lump_sum", "installment"]);
@@ -24,11 +32,11 @@ function formString(formData: FormData, name: string): string | undefined {
 
 export type LendingActionState = { error?: string; success?: boolean };
 
-export type LendingPaymentRow = typeof lendingPayments.$inferSelect;
+export type LendingPaymentRow = LendingPaymentRowNormalized;
 
 export type LendingWithPayments = {
-  lending: typeof lendings.$inferSelect;
-  payments: LendingPaymentRow[];
+  lending: LendingRowNormalized;
+  payments: LendingPaymentRowNormalized[];
   paidCents: number;
   remainingCents: number;
 };
@@ -41,7 +49,7 @@ export async function getLendingsWithPayments(): Promise<LendingWithPayments[]> 
   const db = getDb();
   const rows = await db.query.lendings.findMany({
     where: eq(lendings.userId, userId),
-    orderBy: [desc(lendings.startedAt), asc(lendings.counterpartyName)],
+    orderBy: [desc(lendings.startedAt), asc(lendings.id)],
     with: {
       payments: {
         orderBy: [desc(lendingPayments.paidAt), desc(lendingPayments.createdAt)],
@@ -50,10 +58,12 @@ export async function getLendingsWithPayments(): Promise<LendingWithPayments[]> 
   });
 
   return rows.map((r) => {
-    const { payments: p, ...lending } = r;
-    const paidCents = p.reduce((s, x) => s + x.amountCents, 0);
+    const { payments: p, ...lendingRaw } = r;
+    const lending = normalizeLendingRow(userId, lendingRaw);
+    const payments = p.map((x) => normalizeLendingPaymentRow(userId, x));
+    const paidCents = payments.reduce((s, x) => s + x.amountCents, 0);
     const remainingCents = Math.max(0, lending.principalCents - paidCents);
-    return { lending, payments: p, paidCents, remainingCents };
+    return { lending, payments, paidCents, remainingCents };
   });
 }
 
@@ -109,15 +119,42 @@ export async function createLending(
     return { error: "Invalid start date" };
   }
 
+  const counterparty = formatTypedLabel(parsed.data.counterpartyName.trim());
+  if (!counterparty) {
+    return { error: "Counterparty name is required" };
+  }
+  const notesFormatted = parsed.data.notes?.trim()
+    ? formatTypedBlock(parsed.data.notes.trim())
+    : null;
+
+  let financePayload: string;
+  try {
+    financePayload = encryptFinanceObject(userId, {
+      counterpartyName: counterparty,
+      principalCents: minor,
+      notes: notesFormatted,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY (e.g. openssl rand -hex 32) to save lending data encrypted.",
+      };
+    }
+    return { error: "Could not encrypt loan. Try again." };
+  }
+
   await getDb().insert(lendings).values({
     userId,
-    counterpartyName: parsed.data.counterpartyName.trim(),
+    financePayload,
+    counterpartyName: null,
+    principalCents: null,
+    notes: null,
     kind: parsed.data.kind,
-    principalCents: minor,
     currency: parsed.data.currency,
     repaymentStyle: parsed.data.repaymentStyle,
     startedAt,
-    notes: parsed.data.notes?.trim() || null,
   });
 
   revalidatePath("/lending");
@@ -185,7 +222,7 @@ export async function addLendingPayment(
   }
 
   const db = getDb();
-  const loan = await db.query.lendings.findFirst({
+  const loanRow = await db.query.lendings.findFirst({
     where: and(
       eq(lendings.id, parsed.data.lendingId),
       eq(lendings.userId, userId),
@@ -195,11 +232,16 @@ export async function addLendingPayment(
     },
   });
 
-  if (!loan) {
+  if (!loanRow) {
     return { error: "Loan not found" };
   }
 
-  const paidSoFar = loan.payments.reduce((s, p) => s + p.amountCents, 0);
+  const { payments, ...lRaw } = loanRow;
+  const loan = normalizeLendingRow(userId, lRaw);
+  const paidSoFar = payments.reduce(
+    (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+    0,
+  );
   const remaining = Math.max(0, loan.principalCents - paidSoFar);
   if (minor > remaining) {
     return {
@@ -207,11 +249,33 @@ export async function addLendingPayment(
     };
   }
 
+  const payNote = parsed.data.note?.trim()
+    ? formatTypedLabel(parsed.data.note.trim())
+    : null;
+
+  let financePayload: string;
+  try {
+    financePayload = encryptFinanceObject(userId, {
+      amountCents: minor,
+      note: payNote,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY to record payments with encryption.",
+      };
+    }
+    return { error: "Could not encrypt payment. Try again." };
+  }
+
   await db.insert(lendingPayments).values({
     lendingId: parsed.data.lendingId,
-    amountCents: minor,
+    financePayload,
+    amountCents: null,
+    note: null,
     paidAt,
-    note: parsed.data.note?.trim() || null,
   });
 
   revalidatePath("/lending");
