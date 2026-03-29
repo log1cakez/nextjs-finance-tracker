@@ -11,20 +11,106 @@ import {
   recurringExpenses,
   transactions,
 } from "@/db/schema";
-import { getSessionUserId } from "@/lib/session";
+import { computeCreditUsedCents } from "@/lib/credit-utilization";
 import { FINANCE_ACCOUNT_TYPES } from "@/lib/financial-account-labels";
+import {
+  parseAmountToMinor,
+  SUPPORTED_CURRENCIES,
+  type FiatCurrency,
+} from "@/lib/money";
+import { getSessionUserId } from "@/lib/session";
 
 const typeSchema = z.enum(FINANCE_ACCOUNT_TYPES);
+const bankKindSchema = z.enum(["debit", "credit"]);
 
-const createSchema = z.object({
-  name: z.string().min(1, "Name is required").max(120),
-  type: typeSchema,
-});
+function parseOptionalDayOfMonth(
+  raw: string | undefined,
+  label: string,
+): { ok: true; value: number | null } | { ok: false; message: string } {
+  const t = raw?.trim() ?? "";
+  if (t.length === 0) return { ok: true, value: null };
+  const n = Number.parseInt(t, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 31) {
+    return {
+      ok: false,
+      message: `${label} must be a day of month from 1 to 31 (or leave blank)`,
+    };
+  }
+  return { ok: true, value: n };
+}
 
 export type FinancialAccountActionState = {
   error?: string;
   success?: boolean;
 };
+
+export type UpdateCreditActionState = FinancialAccountActionState;
+
+const createSchema = z
+  .object({
+    name: z.string().min(1, "Name is required").max(120),
+    type: typeSchema,
+    bankKind: z.string().optional(),
+    creditLimit: z.string().optional(),
+    creditOpening: z.string().optional(),
+    creditLimitCurrency: z.enum(SUPPORTED_CURRENCIES).optional(),
+    creditStatementDay: z.string().optional(),
+    creditPaymentDueDay: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type !== "bank") return;
+    const bk = bankKindSchema.safeParse(data.bankKind);
+    if (!bk.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Choose debit or credit for this bank account",
+        path: ["bankKind"],
+      });
+      return;
+    }
+    if (bk.data === "credit") {
+      const lim = parseAmountToMinor(data.creditLimit?.trim() ?? "");
+      if (lim === null || lim <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter a positive credit limit",
+          path: ["creditLimit"],
+        });
+      }
+      if (
+        !data.creditLimitCurrency ||
+        !SUPPORTED_CURRENCIES.includes(data.creditLimitCurrency)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Pick a currency for the credit limit",
+          path: ["creditLimitCurrency"],
+        });
+      }
+      const st = parseOptionalDayOfMonth(
+        data.creditStatementDay,
+        "Statement date",
+      );
+      if (!st.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: st.message,
+          path: ["creditStatementDay"],
+        });
+      }
+      const pd = parseOptionalDayOfMonth(
+        data.creditPaymentDueDay,
+        "Payment due date",
+      );
+      if (!pd.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: pd.message,
+          path: ["creditPaymentDueDay"],
+        });
+      }
+    }
+  });
 
 export async function createFinancialAccount(
   _prev: FinancialAccountActionState,
@@ -38,6 +124,12 @@ export async function createFinancialAccount(
   const parsed = createSchema.safeParse({
     name: formData.get("name"),
     type: formData.get("type"),
+    bankKind: formData.get("bankKind") ?? undefined,
+    creditLimit: formData.get("creditLimit") ?? undefined,
+    creditOpening: formData.get("creditOpening") ?? undefined,
+    creditLimitCurrency: formData.get("creditLimitCurrency") ?? undefined,
+    creditStatementDay: formData.get("creditStatementDay") ?? undefined,
+    creditPaymentDueDay: formData.get("creditPaymentDueDay") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -45,10 +137,58 @@ export async function createFinancialAccount(
     return { error: msg };
   }
 
+  const { name, type } = parsed.data;
+
+  let bankKind: "debit" | "credit" | null = null;
+  let creditLimitCents: number | null = null;
+  let creditLimitCurrency: FiatCurrency | null = null;
+  let creditOpeningBalanceCents = 0;
+  let creditStatementDayOfMonth: number | null = null;
+  let creditPaymentDueDayOfMonth: number | null = null;
+
+  if (type === "bank") {
+    const bk = bankKindSchema.parse(parsed.data.bankKind);
+    bankKind = bk;
+    if (bk === "credit") {
+      creditLimitCents = parseAmountToMinor(parsed.data.creditLimit!.trim())!;
+      creditLimitCurrency = parsed.data.creditLimitCurrency!;
+      const openRaw = parsed.data.creditOpening?.trim() ?? "";
+      if (openRaw.length > 0) {
+        const o = parseAmountToMinor(openRaw);
+        if (o === null) {
+          return { error: "Enter a valid starting balance owed (or leave blank)" };
+        }
+        creditOpeningBalanceCents = o;
+      }
+      const st = parseOptionalDayOfMonth(
+        parsed.data.creditStatementDay,
+        "Statement date",
+      );
+      const pd = parseOptionalDayOfMonth(
+        parsed.data.creditPaymentDueDay,
+        "Payment due date",
+      );
+      if (!st.ok) {
+        return { error: st.message };
+      }
+      if (!pd.ok) {
+        return { error: pd.message };
+      }
+      creditStatementDayOfMonth = st.value;
+      creditPaymentDueDayOfMonth = pd.value;
+    }
+  }
+
   await getDb().insert(financialAccounts).values({
     userId,
-    name: parsed.data.name.trim(),
-    type: parsed.data.type,
+    name: name.trim(),
+    type,
+    bankKind,
+    creditLimitCents,
+    creditLimitCurrency,
+    creditOpeningBalanceCents,
+    creditStatementDayOfMonth,
+    creditPaymentDueDayOfMonth,
   });
 
   revalidatePath("/accounts");
@@ -56,6 +196,123 @@ export async function createFinancialAccount(
   revalidatePath("/transactions");
   revalidatePath("/recurring");
   revalidatePath("/transfers");
+  return { success: true };
+}
+
+const updateCreditSchema = z
+  .object({
+    id: z.string().uuid(),
+    creditLimit: z.string().min(1, "Credit limit is required"),
+    creditOpening: z.string().optional(),
+    creditLimitCurrency: z.enum(SUPPORTED_CURRENCIES),
+    creditStatementDay: z.string().optional(),
+    creditPaymentDueDay: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const st = parseOptionalDayOfMonth(
+      data.creditStatementDay,
+      "Statement date",
+    );
+    if (!st.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: st.message,
+        path: ["creditStatementDay"],
+      });
+    }
+    const pd = parseOptionalDayOfMonth(
+      data.creditPaymentDueDay,
+      "Payment due date",
+    );
+    if (!pd.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: pd.message,
+        path: ["creditPaymentDueDay"],
+      });
+    }
+  });
+
+export async function updateBankCreditSettings(
+  _prev: UpdateCreditActionState,
+  formData: FormData,
+): Promise<UpdateCreditActionState> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { error: "Sign in required" };
+  }
+
+  const parsed = updateCreditSchema.safeParse({
+    id: formData.get("id"),
+    creditLimit: formData.get("creditLimit"),
+    creditOpening: formData.get("creditOpening"),
+    creditLimitCurrency: formData.get("creditLimitCurrency"),
+    creditStatementDay: formData.get("creditStatementDay") ?? undefined,
+    creditPaymentDueDay: formData.get("creditPaymentDueDay") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input";
+    return { error: msg };
+  }
+
+  const db = getDb();
+  const acc = await db.query.financialAccounts.findFirst({
+    where: and(
+      eq(financialAccounts.id, parsed.data.id),
+      eq(financialAccounts.userId, userId),
+    ),
+  });
+
+  if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
+    return { error: "That account is not a credit bank account" };
+  }
+
+  const lim = parseAmountToMinor(parsed.data.creditLimit.trim());
+  if (lim === null || lim <= 0) {
+    return { error: "Enter a positive credit limit" };
+  }
+
+  let creditOpeningBalanceCents = 0;
+  const openRaw = parsed.data.creditOpening?.trim() ?? "";
+  if (openRaw.length > 0) {
+    const o = parseAmountToMinor(openRaw);
+    if (o === null) {
+      return { error: "Enter a valid starting balance owed (or leave blank for zero)" };
+    }
+    creditOpeningBalanceCents = o;
+  }
+
+  const st = parseOptionalDayOfMonth(
+    parsed.data.creditStatementDay,
+    "Statement date",
+  );
+  const pd = parseOptionalDayOfMonth(
+    parsed.data.creditPaymentDueDay,
+    "Payment due date",
+  );
+  if (!st.ok) {
+    return { error: st.message };
+  }
+  if (!pd.ok) {
+    return { error: pd.message };
+  }
+
+  await db
+    .update(financialAccounts)
+    .set({
+      creditLimitCents: lim,
+      creditLimitCurrency: parsed.data.creditLimitCurrency,
+      creditOpeningBalanceCents,
+      creditStatementDayOfMonth: st.value,
+      creditPaymentDueDayOfMonth: pd.value,
+    })
+    .where(
+      and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
+    );
+
+  revalidatePath("/accounts");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 
@@ -115,4 +372,38 @@ export async function getFinancialAccounts() {
       asc(financialAccounts.name),
     ],
   });
+}
+
+export type FinancialAccountWithUsage = Awaited<
+  ReturnType<typeof getFinancialAccounts>
+>[number] & { usedCreditCents?: number };
+
+export async function getFinancialAccountsWithUsage(): Promise<
+  FinancialAccountWithUsage[]
+> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return [];
+  }
+  const accounts = await getFinancialAccounts();
+  const out: FinancialAccountWithUsage[] = await Promise.all(
+    accounts.map(async (a) => {
+      if (
+        a.type !== "bank" ||
+        a.bankKind !== "credit" ||
+        a.creditLimitCents == null ||
+        a.creditLimitCurrency == null
+      ) {
+        return { ...a };
+      }
+      const usedCreditCents = await computeCreditUsedCents(
+        userId,
+        a.id,
+        a.creditOpeningBalanceCents,
+        a.creditLimitCurrency as FiatCurrency,
+      );
+      return { ...a, usedCreditCents };
+    }),
+  );
+  return out;
 }

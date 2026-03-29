@@ -1,12 +1,16 @@
-import { getFinancialAccounts } from "@/app/actions/financial-accounts";
+import { getFinancialAccountsWithUsage } from "@/app/actions/financial-accounts";
 import { AccountManager } from "@/components/account-manager";
+import { getPreferredCurrency } from "@/lib/preferences";
 
 export default async function AccountsPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const items = await getFinancialAccounts();
+  const [items, preferredCurrency] = await Promise.all([
+    getFinancialAccountsWithUsage(),
+    getPreferredCurrency(),
+  ]);
   const sp = await searchParams;
 
   return (
@@ -28,7 +32,7 @@ export default async function AccountsPage({
         </p>
       ) : null}
 
-      <AccountManager items={items} />
+      <AccountManager items={items} defaultCurrency={preferredCurrency} />
     </div>
   );
 }

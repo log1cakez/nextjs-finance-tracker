@@ -103,11 +103,13 @@ async function main() {
         userId,
         name: `Checking ${SEED_TAG}`,
         type: "bank",
+        bankKind: "debit",
       },
       {
         userId,
         name: `Savings ${SEED_TAG}`,
         type: "bank",
+        bankKind: "debit",
       },
       {
         userId,

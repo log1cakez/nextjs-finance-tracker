@@ -21,6 +21,8 @@ export const dynamic = "force-dynamic";
 const emptyOverview: CurrencyOverview = {
   assetsFromActivityMinor: 0,
   liabilitiesFromActivityMinor: 0,
+  lendingReceivablesOutstandingMinor: 0,
+  lendingPayablesOutstandingMinor: 0,
   projectedIncomeMinor: 0,
   projectedExpenseMinor: 0,
   projectedIncomeYearlyMinor: 0,

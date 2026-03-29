@@ -1,6 +1,7 @@
 import type { CurrencyOverview } from "@/app/actions/dashboard-overview";
 import { StatCard } from "@/components/stat-card";
 import { formatMoney, type FiatCurrency } from "@/lib/money";
+import Link from "next/link";
 
 export function DashboardOverviewSection({
   preferredCurrency,
@@ -20,9 +21,10 @@ export function DashboardOverviewSection({
           Position & projections ({preferredCurrency})
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Assets and liabilities from account activity (not live balances).
-          Projections use fixed-amount recurring templates only (variable
-          amounts, e.g. credit cards, are excluded).
+          Assets and liabilities include transaction activity per account and
+          outstanding lending (receivables in assets, payables in liabilities). Not
+          live bank balances. Projections use fixed-amount recurring templates only
+          (variable amounts are excluded).
         </p>
       </div>
 
@@ -34,7 +36,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Sum of positive account nets"
+            hint="Positive account nets + receivables"
             variant="income"
           />
           <StatCard
@@ -61,7 +63,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Sum of negative account nets"
+            hint="Negative account nets + payables"
             variant="expense"
           />
           <StatCard
@@ -82,6 +84,32 @@ export function DashboardOverviewSection({
           />
         </div>
       </div>
+
+      {overview.lendingReceivablesOutstandingMinor > 0 ||
+      overview.lendingPayablesOutstandingMinor > 0 ? (
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <span className="font-medium text-zinc-600 dark:text-zinc-300">
+            Lending in {preferredCurrency}
+          </span>
+          :{" "}
+          {formatMoney(
+            overview.lendingReceivablesOutstandingMinor,
+            preferredCurrency,
+          )}{" "}
+          receivable and{" "}
+          {formatMoney(
+            overview.lendingPayablesOutstandingMinor,
+            preferredCurrency,
+          )}{" "}
+          payable are already included in assets and liabilities above.{" "}
+          <Link
+            href="/lending"
+            className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+          >
+            Manage lending
+          </Link>
+        </p>
+      ) : null}
 
       {showOtherCurrency ? (
         <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-xs text-zinc-600 sm:px-4 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">

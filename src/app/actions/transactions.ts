@@ -172,6 +172,7 @@ export async function deleteTransaction(formData: FormData) {
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
   revalidatePath("/", "layout");
   revalidatePath("/transactions");
+  revalidatePath("/accounts");
   revalidatePath("/recurring");
 }
 

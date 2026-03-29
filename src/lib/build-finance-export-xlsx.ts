@@ -147,13 +147,13 @@ export async function buildFinanceExportXlsxBuffer(
       Metric: "Assets (from activity)",
       USD: minorToMajor(usd.assetsFromActivityMinor),
       PHP: minorToMajor(php.assetsFromActivityMinor),
-      Notes: "Sum of positive per-account nets",
+      Notes: "Positive per-account nets + lending receivables",
     },
     {
       Metric: "Liabilities (from activity)",
       USD: minorToMajor(usd.liabilitiesFromActivityMinor),
       PHP: minorToMajor(php.liabilitiesFromActivityMinor),
-      Notes: "Sum of negative per-account nets",
+      Notes: "Negative per-account nets + lending payables",
     },
     {
       Metric: "Net position (assets − liabilities)",
@@ -163,8 +163,40 @@ export async function buildFinanceExportXlsxBuffer(
       PHP: minorToMajor(
         php.assetsFromActivityMinor - php.liabilitiesFromActivityMinor,
       ),
+      Notes: "Transactions + lending combined",
+    },
+    { Metric: "", USD: "", PHP: "", Notes: "" },
+    {
+      Metric: "— Lending breakdown (subset of rows above) —",
+      USD: "",
+      PHP: "",
       Notes: "",
     },
+    {
+      Metric: "Lending receivables (in assets total)",
+      USD: minorToMajor(usd.lendingReceivablesOutstandingMinor),
+      PHP: minorToMajor(php.lendingReceivablesOutstandingMinor),
+      Notes: "Included in Assets",
+    },
+    {
+      Metric: "Lending payables (in liabilities total)",
+      USD: minorToMajor(usd.lendingPayablesOutstandingMinor),
+      PHP: minorToMajor(php.lendingPayablesOutstandingMinor),
+      Notes: "Included in Liabilities",
+    },
+    {
+      Metric: "Net lending (receivables − payables)",
+      USD: minorToMajor(
+        usd.lendingReceivablesOutstandingMinor -
+          usd.lendingPayablesOutstandingMinor,
+      ),
+      PHP: minorToMajor(
+        php.lendingReceivablesOutstandingMinor -
+          php.lendingPayablesOutstandingMinor,
+      ),
+      Notes: "Same effect as portion of net position from IOUs",
+    },
+    { Metric: "", USD: "", PHP: "", Notes: "" },
     {
       Metric: "Projected income / month",
       USD: minorToMajor(usd.projectedIncomeMinor),

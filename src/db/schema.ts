@@ -24,6 +24,9 @@ export const financialAccountType = pgEnum("financial_account_type", [
   "other",
 ]);
 
+/** Bank accounts only: checking/debit vs credit card. */
+export const bankAccountKind = pgEnum("bank_account_kind", ["debit", "credit"]);
+
 export const recurringFrequency = pgEnum("recurring_frequency", [
   "weekly",
   "biweekly",
@@ -146,6 +149,20 @@ export const financialAccounts = pgTable("financial_accounts", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   type: financialAccountType("type").notNull(),
+  /** Set when `type` is `bank`; null for other account types. */
+  bankKind: bankAccountKind("bank_kind"),
+  /** Credit limit (minor units); only when `bankKind` is `credit`. */
+  creditLimitCents: integer("credit_limit_cents"),
+  /** Currency for limit and utilization (transactions in other currencies are ignored). */
+  creditLimitCurrency: transactionCurrency("credit_limit_currency"),
+  /** Balance owed before tracking in this app (same currency as limit). */
+  creditOpeningBalanceCents: integer("credit_opening_balance_cents")
+    .notNull()
+    .default(0),
+  /** Billing cycle statement close day (1–31); credit accounts only. */
+  creditStatementDayOfMonth: integer("credit_statement_day_of_month"),
+  /** Payment due day of month (1–31); credit accounts only. */
+  creditPaymentDueDayOfMonth: integer("credit_payment_due_day_of_month"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
