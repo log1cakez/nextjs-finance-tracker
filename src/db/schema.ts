@@ -55,6 +55,8 @@ export const users = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   passwordHash: text("password_hash"),
+  /** SHA-256 hex of secret token for optional iCal-style due-date feed. */
+  calendarFeedTokenHash: text("calendar_feed_token_hash"),
 });
 
 export const accounts = pgTable(

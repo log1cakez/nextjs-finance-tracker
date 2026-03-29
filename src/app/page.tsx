@@ -1,3 +1,4 @@
+import { getDashboardUpcomingDueDates } from "@/app/actions/dashboard-due-dates";
 import {
   getDashboardOverview,
   type CurrencyOverview,
@@ -8,6 +9,7 @@ import {
   getTransactionsForMonth,
 } from "@/app/actions/transactions";
 import { DashboardCashflowChart } from "@/components/dashboard-cashflow-chart";
+import { DashboardDueDatesSection } from "@/components/dashboard-due-dates-section";
 import { DashboardOverviewSection } from "@/components/dashboard-overview-section";
 import { StatCard } from "@/components/stat-card";
 import { TransactionList } from "@/components/transaction-list";
@@ -32,12 +34,14 @@ const emptyOverview: CurrencyOverview = {
 export default async function DashboardPage() {
   const { start, end } = monthBounds();
   const preferredCurrency = await getPreferredCurrency();
-  const [monthTx, recent, overviewData, cashflowTrend] = await Promise.all([
-    getTransactionsForMonth(start, end),
-    getRecentTransactions(8),
-    getDashboardOverview(),
-    getMonthlyCashflowTrend(preferredCurrency, 6),
-  ]);
+  const [monthTx, recent, overviewData, cashflowTrend, dueDates] =
+    await Promise.all([
+      getTransactionsForMonth(start, end),
+      getRecentTransactions(8),
+      getDashboardOverview(),
+      getMonthlyCashflowTrend(preferredCurrency, 6),
+      getDashboardUpcomingDueDates(),
+    ]);
 
   const otherCurrency: FiatCurrency =
     preferredCurrency === "USD" ? "PHP" : "USD";
@@ -84,6 +88,8 @@ export default async function DashboardPage() {
         otherCurrencyOverview={otherOverview}
         showOtherCurrency={showOtherCurrency}
       />
+
+      <DashboardDueDatesSection items={dueDates ?? []} />
 
       <div className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
