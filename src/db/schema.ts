@@ -33,6 +33,14 @@ export const recurringFrequency = pgEnum("recurring_frequency", [
   "yearly",
 ]);
 
+/** Receivable = someone borrowed from you; payable = you borrowed from someone. */
+export const lendingKind = pgEnum("lending_kind", ["receivable", "payable"]);
+
+export const lendingRepaymentStyle = pgEnum("lending_repayment_style", [
+  "lump_sum",
+  "installment",
+]);
+
 export const users = pgTable("user", {
   id: text("id")
     .primaryKey()
@@ -152,7 +160,9 @@ export const recurringExpenses = pgTable("recurring_expenses", {
     .references(() => users.id, { onDelete: "cascade" }),
   kind: transactionKind("kind").notNull().default("expense"),
   name: text("name").notNull(),
-  amountCents: integer("amount_cents").notNull(),
+  /** Null when `amountVariable` is true (e.g. credit card — amount entered when logging). */
+  amountCents: integer("amount_cents"),
+  amountVariable: boolean("amount_variable").notNull().default(false),
   currency: transactionCurrency("currency").notNull().default("USD"),
   categoryId: uuid("category_id").references(() => categories.id, {
     onDelete: "set null",
@@ -184,6 +194,38 @@ export const accountTransfers = pgTable("account_transfers", {
   currency: transactionCurrency("currency").notNull().default("USD"),
   payload: text("payload").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Personal loans / IOUs: receivables (owed to you) and payables (you owe).
+ * Payments reduce the outstanding balance (lump sum or recorded installments).
+ */
+export const lendings = pgTable("lendings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  counterpartyName: text("counterparty_name").notNull(),
+  kind: lendingKind("kind").notNull(),
+  principalCents: integer("principal_cents").notNull(),
+  currency: transactionCurrency("currency").notNull().default("USD"),
+  repaymentStyle: lendingRepaymentStyle("repayment_style")
+    .notNull()
+    .default("lump_sum"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const lendingPayments = pgTable("lending_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lendingId: uuid("lending_id")
+    .notNull()
+    .references(() => lendings.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -219,6 +261,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   recurringExpenses: many(recurringExpenses),
   accountTransfers: many(accountTransfers),
   transactions: many(transactions),
+  lendings: many(lendings),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -303,6 +346,21 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+export const lendingsRelations = relations(lendings, ({ one, many }) => ({
+  user: one(users, {
+    fields: [lendings.userId],
+    references: [users.id],
+  }),
+  payments: many(lendingPayments),
+}));
+
+export const lendingPaymentsRelations = relations(lendingPayments, ({ one }) => ({
+  lending: one(lendings, {
+    fields: [lendingPayments.lendingId],
+    references: [lendings.id],
+  }),
+}));
+
 export const schema = {
   users,
   accounts,
@@ -314,6 +372,8 @@ export const schema = {
   financialAccounts,
   recurringExpenses,
   accountTransfers,
+  lendings,
+  lendingPayments,
   transactions,
   usersRelations,
   accountsRelations,
@@ -323,5 +383,7 @@ export const schema = {
   financialAccountsRelations,
   recurringExpensesRelations,
   accountTransfersRelations,
+  lendingsRelations,
+  lendingPaymentsRelations,
   transactionsRelations,
 };

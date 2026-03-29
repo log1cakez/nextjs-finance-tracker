@@ -2,7 +2,7 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { transactions } from "@/db/schema";
+import { recurringExpenses, transactions } from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
 import type { FiatCurrency } from "@/lib/money";
 import { SUPPORTED_CURRENCIES } from "@/lib/money";
@@ -12,7 +12,6 @@ import {
   recurringAmountToYearlyMinor,
 } from "@/lib/recurring-monthly-equivalent";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
-import { getRecurringExpenses } from "./recurring-expenses";
 
 export type CurrencyOverview = {
   assetsFromActivityMinor: number;
@@ -34,29 +33,26 @@ function emptyOverview(): CurrencyOverview {
   };
 }
 
+export type TransactionActivityBucket = {
+  income: number;
+  expense: number;
+  accountName: string;
+  currency: FiatCurrency;
+};
+
 /**
- * Assets / liabilities = split of per-account net (income − expense) from
- * recorded transactions only — not bank balances. Negative nets count as liabilities.
+ * Per account+currency income/expense from transactions (same buckets as dashboard position).
  */
-export async function getDashboardOverview(): Promise<{
-  byCurrency: Record<FiatCurrency, CurrencyOverview>;
-} | null> {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return null;
-  }
-
-  const byCurrency: Record<FiatCurrency, CurrencyOverview> = {
-    USD: emptyOverview(),
-    PHP: emptyOverview(),
-  };
-
+export async function computeTransactionBuckets(
+  userId: string,
+): Promise<Map<string, TransactionActivityBucket>> {
   const db = getDb();
   const txRows = await db.query.transactions.findMany({
     where: eq(transactions.userId, userId),
+    with: { financialAccount: true },
   });
 
-  const netByBucket = new Map<string, { income: number; expense: number }>();
+  const netByBucket = new Map<string, TransactionActivityBucket>();
 
   for (const row of txRows) {
     const tx = toDecryptedTransaction(userId, row);
@@ -69,7 +65,12 @@ export async function getDashboardOverview(): Promise<{
       : `__unassigned|${c}`;
     let b = netByBucket.get(bucketKey);
     if (!b) {
-      b = { income: 0, expense: 0 };
+      b = {
+        income: 0,
+        expense: 0,
+        accountName: row.financialAccount?.name ?? "(Unassigned)",
+        currency: c,
+      };
       netByBucket.set(bucketKey, b);
     }
     if (tx.kind === "income") {
@@ -79,18 +80,38 @@ export async function getDashboardOverview(): Promise<{
     }
   }
 
-  for (const [key, b] of netByBucket) {
-    const currency = key.split("|")[1] as FiatCurrency;
+  return netByBucket;
+}
+
+/** Dashboard position & recurring projections by currency (matches UI). */
+export async function computeDashboardOverviewByCurrency(
+  userId: string,
+): Promise<{ byCurrency: Record<FiatCurrency, CurrencyOverview> }> {
+  const byCurrency: Record<FiatCurrency, CurrencyOverview> = {
+    USD: emptyOverview(),
+    PHP: emptyOverview(),
+  };
+
+  const netByBucket = await computeTransactionBuckets(userId);
+
+  for (const [, b] of netByBucket) {
     const net = b.income - b.expense;
     if (net >= 0) {
-      byCurrency[currency].assetsFromActivityMinor += net;
+      byCurrency[b.currency].assetsFromActivityMinor += net;
     } else {
-      byCurrency[currency].liabilitiesFromActivityMinor += -net;
+      byCurrency[b.currency].liabilitiesFromActivityMinor += -net;
     }
   }
 
-  const recurring = await getRecurringExpenses();
-  for (const item of recurring) {
+  const db = getDb();
+  const recurringRows = await db.query.recurringExpenses.findMany({
+    where: eq(recurringExpenses.userId, userId),
+  });
+
+  for (const item of recurringRows) {
+    if (item.amountVariable || item.amountCents == null) {
+      continue;
+    }
     const c = item.currency as FiatCurrency;
     if (!SUPPORTED_CURRENCIES.includes(c)) {
       continue;
@@ -113,4 +134,18 @@ export async function getDashboardOverview(): Promise<{
   }
 
   return { byCurrency };
+}
+
+/**
+ * Assets / liabilities = split of per-account net (income − expense) from
+ * recorded transactions only — not bank balances. Negative nets count as liabilities.
+ */
+export async function getDashboardOverview(): Promise<{
+  byCurrency: Record<FiatCurrency, CurrencyOverview>;
+} | null> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return null;
+  }
+  return computeDashboardOverviewByCurrency(userId);
 }

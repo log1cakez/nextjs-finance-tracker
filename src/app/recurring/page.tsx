@@ -38,7 +38,9 @@ export default async function RecurringPage({
         </h1>
         <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
           Templates on a schedule. Use categories like ordinary transactions;
-          logging creates a real entry for the date you pick.
+          logging creates a real entry for the date you pick. Variable-amount
+          templates (e.g. credit cards) skip a fixed price and ask for the
+          amount when you log.
         </p>
       </div>
 

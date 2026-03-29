@@ -21,7 +21,8 @@ export function DashboardOverviewSection({
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           Assets and liabilities from account activity (not live balances).
-          Projection rows come from recurring templates.
+          Projections use fixed-amount recurring templates only (variable
+          amounts, e.g. credit cards, are excluded).
         </p>
       </div>
 

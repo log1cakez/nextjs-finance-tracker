@@ -72,6 +72,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (p.startsWith("/api/auth")) {
         return true;
       }
+      if (p.startsWith("/api/export/")) {
+        return true;
+      }
       if (
         auth?.user &&
         (p === "/login" ||

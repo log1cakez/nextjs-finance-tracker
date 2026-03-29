@@ -10,6 +10,7 @@ export const mainNav = [
   { href: "/transactions", label: "Transactions" },
   { href: "/accounts", label: "Accounts" },
   { href: "/transfers", label: "Transfers" },
+  { href: "/lending", label: "Lending" },
   { href: "/recurring", label: "Recurring" },
   { href: "/categories", label: "Categories" },
 ] as const;

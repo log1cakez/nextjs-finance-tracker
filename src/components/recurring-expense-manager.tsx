@@ -40,7 +40,8 @@ type RecurringRow = {
   id: string;
   kind: RecurringKind;
   name: string;
-  amountCents: number;
+  amountCents: number | null;
+  amountVariable: boolean;
   currency: string;
   frequency: RecurringFrequencyKind;
   dueDayOfMonth: number | null;
@@ -49,6 +50,10 @@ type RecurringRow = {
   category: (typeof categories.$inferSelect) | null;
   financialAccount: (typeof financialAccounts.$inferSelect) | null;
 };
+
+function logsAmountEachTime(row: RecurringRow): boolean {
+  return row.amountVariable || row.amountCents == null;
+}
 
 const initial: RecurringExpenseActionState = {};
 
@@ -112,10 +117,18 @@ function FrequencyGroups({
                       <p className="font-medium text-zinc-900 dark:text-zinc-50">
                         {row.name}
                       </p>
-                      <p className="mt-0.5 text-sm tabular-nums text-zinc-700 dark:text-zinc-300">
-                        {formatMoney(
-                          row.amountCents,
-                          row.currency as FiatCurrency,
+                      <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">
+                        {logsAmountEachTime(row) ? (
+                          <span className="italic text-zinc-600 dark:text-zinc-400">
+                            Amount varies — enter when you log
+                          </span>
+                        ) : (
+                          <span className="tabular-nums">
+                            {formatMoney(
+                              row.amountCents!,
+                              row.currency as FiatCurrency,
+                            )}
+                          </span>
                         )}
                         {row.financialAccount
                           ? ` · ${row.financialAccount.name}`
@@ -132,6 +145,17 @@ function FrequencyGroups({
                         className="flex flex-wrap items-center gap-2"
                       >
                         <input type="hidden" name="id" value={row.id} />
+                        {logsAmountEachTime(row) ? (
+                          <input
+                            name="amount"
+                            type="text"
+                            inputMode="decimal"
+                            required
+                            placeholder="Amount"
+                            autoComplete="off"
+                            className="min-h-9 w-[6.5rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                          />
+                        ) : null}
                         <input
                           type="date"
                           name="occurredAt"
@@ -188,6 +212,7 @@ export function RecurringExpenseManager({
   const formRef = useRef<HTMLFormElement>(null);
   const [frequency, setFrequency] = useState<string>("");
   const [recKind, setRecKind] = useState<RecurringKind>("expense");
+  const [variableAmount, setVariableAmount] = useState(false);
 
   useEffect(() => {
     if (!state.success) return;
@@ -195,6 +220,7 @@ export function RecurringExpenseManager({
     startTransition(() => {
       setFrequency("");
       setRecKind("expense");
+      setVariableAmount(false);
     });
   }, [state.success]);
 
@@ -231,7 +257,11 @@ export function RecurringExpenseManager({
           <span className="font-medium text-zinc-700 dark:text-zinc-300">
             Log
           </span>{" "}
-          creates a real transaction on the date you choose.
+          creates a real transaction on the date you choose. Use{" "}
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            variable amount
+          </span>{" "}
+          for bills that change (e.g. credit card).
         </p>
 
         <input type="hidden" name="kind" value={recKind} />
@@ -266,13 +296,23 @@ export function RecurringExpenseManager({
           </label>
 
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Amount
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span>
+                Amount
+                {variableAmount ? (
+                  <span className="ml-1 font-normal text-zinc-500 dark:text-zinc-400">
+                    (set when logging)
+                  </span>
+                ) : null}
+              </span>
+            </span>
             <input
               name="amount"
-              required
+              required={!variableAmount}
+              disabled={variableAmount}
               inputMode="decimal"
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-              placeholder="0.00"
+              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              placeholder={variableAmount ? "—" : "0.00"}
             />
           </label>
 
@@ -290,6 +330,24 @@ export function RecurringExpenseManager({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 sm:col-span-2 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              name="amountVariable"
+              value="on"
+              checked={variableAmount}
+              onChange={(e) => setVariableAmount(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-600"
+            />
+            <span>
+              <span className="font-medium">Variable amount</span>
+              <span className="mt-0.5 block font-normal text-zinc-500 dark:text-zinc-400">
+                No fixed amount on the template (e.g. credit card). You enter
+                the amount each time you log.
+              </span>
+            </span>
           </label>
 
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">

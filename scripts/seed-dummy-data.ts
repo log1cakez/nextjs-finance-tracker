@@ -1,5 +1,5 @@
 /**
- * Insert sample categories, accounts, transactions, recurring templates, and (optionally) a transfer
+ * Insert sample categories, accounts, transactions, recurring templates, loans, and (optionally) a transfer
  * for local / staging testing. Requires an existing user (sign up first).
  *
  * Usage:
@@ -16,6 +16,8 @@ import {
   accountTransfers,
   categories,
   financialAccounts,
+  lendingPayments,
+  lendings,
   recurringExpenses,
   transactions,
   users,
@@ -346,6 +348,7 @@ async function main() {
       kind: "expense",
       name: `Streaming subs ${SEED_TAG}`,
       amountCents: 15_99,
+      amountVariable: false,
       currency: "USD",
       categoryId: utilitiesId,
       financialAccountId: checking.id,
@@ -359,6 +362,7 @@ async function main() {
       kind: "expense",
       name: `Gym membership ${SEED_TAG}`,
       amountCents: 49_99,
+      amountVariable: false,
       currency: "USD",
       categoryId: utilitiesId,
       financialAccountId: checking.id,
@@ -372,6 +376,7 @@ async function main() {
       kind: "income",
       name: `Monthly retainer ${SEED_TAG}`,
       amountCents: 2_000_00,
+      amountVariable: false,
       currency: "USD",
       categoryId: freelanceId,
       financialAccountId: checking.id,
@@ -380,7 +385,54 @@ async function main() {
       secondDueDayOfMonth: null,
       dueWeekday: null,
     },
+    {
+      userId,
+      kind: "expense",
+      name: `Credit card (variable) ${SEED_TAG}`,
+      amountCents: null,
+      amountVariable: true,
+      currency: "USD",
+      categoryId: null,
+      financialAccountId: checking.id,
+      frequency: "monthly",
+      dueDayOfMonth: 20,
+      secondDueDayOfMonth: null,
+      dueWeekday: null,
+    },
   ]);
+
+  const [_recvLoan, payLoan] = await db
+    .insert(lendings)
+    .values([
+      {
+        userId,
+        counterpartyName: `Friend (receivable) ${SEED_TAG}`,
+        kind: "receivable",
+        principalCents: 350_00,
+        currency: "USD",
+        repaymentStyle: "lump_sum",
+        startedAt: daysAgo(45),
+        notes: "Short-term loan; track when they repay.",
+      },
+      {
+        userId,
+        counterpartyName: `Relative (payable) ${SEED_TAG}`,
+        kind: "payable",
+        principalCents: 1_200_00,
+        currency: "USD",
+        repaymentStyle: "installment",
+        startedAt: daysAgo(90),
+        notes: "Paying back in parts.",
+      },
+    ])
+    .returning({ id: lendings.id });
+
+  await db.insert(lendingPayments).values({
+    lendingId: payLoan.id,
+    amountCents: 250_00,
+    paidAt: daysAgo(14),
+    note: "Installment 1",
+  });
 
   if (process.env.TRANSACTIONS_ENCRYPTION_KEY?.trim()) {
     const transferPayload = encryptTransactionPayload(userId, {
@@ -404,7 +456,7 @@ async function main() {
   }
 
   console.log(
-    `Done. Seeded user ${email}: ${catRows.length} categories, 3 accounts, ${txValues.length} transactions, 3 recurring templates.`,
+    `Done. Seeded user ${email}: ${catRows.length} categories, 3 accounts, ${txValues.length} transactions, 4 recurring templates, 2 loans (receivable + payable with one payment).`,
   );
 }
 

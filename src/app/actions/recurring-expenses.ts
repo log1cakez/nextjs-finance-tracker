@@ -36,7 +36,8 @@ const createSchema = z
   .object({
     kind: z.enum(["income", "expense"]),
     name: z.string().min(1, "Name is required").max(120),
-    amount: z.string().min(1, "Amount is required"),
+    amount: z.string().optional(),
+    amountVariable: z.boolean(),
     currency: z.enum(SUPPORTED_CURRENCIES),
     categoryId: z.string().uuid().optional(),
     financialAccountId: z.string().min(1, "Pick an account").uuid(),
@@ -106,13 +107,15 @@ const createSchema = z
       }
     }
 
-    const minor = parseAmountToMinor(data.amount);
-    if (minor === null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Enter a valid positive amount",
-        path: ["amount"],
-      });
+    if (!data.amountVariable) {
+      const minor = parseAmountToMinor(data.amount ?? "");
+      if (minor === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter a valid positive amount",
+          path: ["amount"],
+        });
+      }
     }
   });
 
@@ -139,11 +142,17 @@ export async function createRecurringExpense(
 
   const kindRaw = formString(formData, "kind");
   const catRaw = formString(formData, "categoryId");
+  const amountVariableRaw = formData.get("amountVariable");
+  const amountVariable =
+    amountVariableRaw === "on" ||
+    amountVariableRaw === "true" ||
+    amountVariableRaw === "1";
   const parsed = createSchema.safeParse({
     kind:
       kindRaw === "income" || kindRaw === "expense" ? kindRaw : "expense",
     name: formString(formData, "name") ?? "",
-    amount: formString(formData, "amount") ?? "",
+    amount: formString(formData, "amount"),
+    amountVariable,
     currency: currencyResolved,
     categoryId: catRaw && catRaw.length > 0 ? catRaw : undefined,
     financialAccountId: formString(formData, "financialAccountId") ?? "",
@@ -158,7 +167,9 @@ export async function createRecurringExpense(
     return { error: msg };
   }
 
-  const minor = parseAmountToMinor(parsed.data.amount)!;
+  const minor = parsed.data.amountVariable
+    ? null
+    : parseAmountToMinor(parsed.data.amount ?? "")!;
   const frequency = frequencySchema.parse(parsed.data.frequency.trim());
 
   let dueDayOfMonth: number | null = null;
@@ -209,6 +220,7 @@ export async function createRecurringExpense(
     kind: parsed.data.kind,
     name: parsed.data.name.trim(),
     amountCents: minor,
+    amountVariable: parsed.data.amountVariable,
     currency: parsed.data.currency,
     categoryId,
     financialAccountId: parsed.data.financialAccountId,
@@ -272,11 +284,34 @@ export async function logRecurringExpense(formData: FormData) {
     redirect("/recurring?error=" + encodeURIComponent("Not found"));
   }
 
+  const needsAmountAtLog =
+    row.amountVariable || row.amountCents == null;
+  const amountStr = formString(formData, "amount") ?? "";
+  let amountMinor: number;
+  if (needsAmountAtLog) {
+    const m = parseAmountToMinor(amountStr);
+    if (m === null) {
+      redirect(
+        "/recurring?error=" +
+          encodeURIComponent("Enter a valid positive amount for this item."),
+      );
+    }
+    amountMinor = m;
+  } else {
+    if (row.amountCents == null) {
+      redirect(
+        "/recurring?error=" +
+          encodeURIComponent("This template has no amount; enable variable amount or set a fixed amount."),
+      );
+    }
+    amountMinor = row.amountCents;
+  }
+
   let payload: string;
   try {
     payload = encryptTransactionPayload(userId, {
       description: row.name,
-      amountCents: row.amountCents,
+      amountCents: amountMinor,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -175,14 +175,11 @@ export async function deleteTransaction(formData: FormData) {
   revalidatePath("/recurring");
 }
 
-export async function getTransactionsForMonth(
+export async function computeTransactionsForMonthRange(
+  userId: string,
   start: Date,
   end: Date,
 ): Promise<DecryptedTransaction[]> {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return [];
-  }
   const db = getDb();
   const rows = await db.query.transactions.findMany({
     where: and(
@@ -192,6 +189,17 @@ export async function getTransactionsForMonth(
     ),
   });
   return rows.map((r) => toDecryptedTransaction(userId, r));
+}
+
+export async function getTransactionsForMonth(
+  start: Date,
+  end: Date,
+): Promise<DecryptedTransaction[]> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return [];
+  }
+  return computeTransactionsForMonthRange(userId, start, end);
 }
 
 export async function getRecentTransactions(
@@ -234,15 +242,11 @@ export type MonthlyCashflowPoint = {
 };
 
 /** Last `monthCount` calendar months of income/expense in `currency` (actual transactions). */
-export async function getMonthlyCashflowTrend(
+export async function computeMonthlyCashflowTrend(
+  userId: string,
   currency: (typeof SUPPORTED_CURRENCIES)[number],
   monthCount = 6,
 ): Promise<MonthlyCashflowPoint[]> {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return [];
-  }
-
   const now = new Date();
   const count = Math.min(Math.max(monthCount, 1), 24);
   const startMonth = new Date(now.getFullYear(), now.getMonth() - (count - 1), 1);
@@ -310,4 +314,15 @@ export async function getMonthlyCashflowTrend(
       incomeMinor: v.incomeMinor,
       expenseMinor: v.expenseMinor,
     }));
+}
+
+export async function getMonthlyCashflowTrend(
+  currency: (typeof SUPPORTED_CURRENCIES)[number],
+  monthCount = 6,
+): Promise<MonthlyCashflowPoint[]> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return [];
+  }
+  return computeMonthlyCashflowTrend(userId, currency, monthCount);
 }
