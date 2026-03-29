@@ -11,6 +11,12 @@ import {
   recurringAmountToMonthlyMinor,
   recurringAmountToYearlyMinor,
 } from "@/lib/recurring-monthly-equivalent";
+import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
+import {
+  normalizeLendingPaymentRow,
+  normalizeLendingRow,
+} from "@/lib/lending-crypto";
+import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 export type CurrencyOverview = {
@@ -61,6 +67,7 @@ export async function computeTransactionBuckets(
   const netByBucket = new Map<string, TransactionActivityBucket>();
 
   for (const row of txRows) {
+    if (row.reducesCreditBalance) continue;
     const tx = toDecryptedTransaction(userId, row);
     const c = tx.currency as FiatCurrency;
     if (!SUPPORTED_CURRENCIES.includes(c)) {
@@ -74,7 +81,9 @@ export async function computeTransactionBuckets(
       b = {
         income: 0,
         expense: 0,
-        accountName: row.financialAccount?.name ?? "(Unassigned)",
+        accountName: row.financialAccount
+          ? decryptFinancePlaintext(userId, row.financialAccount.name)
+          : "(Unassigned)",
         currency: c,
       };
       netByBucket.set(bucketKey, b);
@@ -115,7 +124,8 @@ export async function computeDashboardOverviewByCurrency(
   });
 
   for (const item of recurringRows) {
-    if (item.amountVariable || item.amountCents == null) {
+    const amt = resolveRecurringAmountCents(userId, item);
+    if (item.amountVariable || amt == null) {
       continue;
     }
     const c = item.currency as FiatCurrency;
@@ -123,11 +133,11 @@ export async function computeDashboardOverviewByCurrency(
       continue;
     }
     const monthly = recurringAmountToMonthlyMinor(
-      item.amountCents,
+      amt,
       item.frequency as RecurringFrequencyKind,
     );
     const yearly = recurringAmountToYearlyMinor(
-      item.amountCents,
+      amt,
       item.frequency as RecurringFrequencyKind,
     );
     if (item.kind === "income") {
@@ -144,13 +154,18 @@ export async function computeDashboardOverviewByCurrency(
     with: { payments: true },
   });
   for (const row of lendingRows) {
-    const c = row.currency as FiatCurrency;
+    const { payments: payList, ...lendRaw } = row;
+    const L = normalizeLendingRow(userId, lendRaw);
+    const c = L.currency as FiatCurrency;
     if (!SUPPORTED_CURRENCIES.includes(c)) {
       continue;
     }
-    const paidCents = row.payments.reduce((s, p) => s + p.amountCents, 0);
-    const remainingCents = Math.max(0, row.principalCents - paidCents);
-    if (row.kind === "receivable") {
+    const paidCents = payList.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
+    const remainingCents = Math.max(0, L.principalCents - paidCents);
+    if (L.kind === "receivable") {
       byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;

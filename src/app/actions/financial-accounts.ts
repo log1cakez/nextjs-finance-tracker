@@ -12,12 +12,18 @@ import {
   transactions,
 } from "@/db/schema";
 import { computeCreditUsedCents } from "@/lib/credit-utilization";
+import {
+  decryptFinancePlaintext,
+  encryptFinancePlaintext,
+} from "@/lib/finance-field-crypto";
 import { FINANCE_ACCOUNT_TYPES } from "@/lib/financial-account-labels";
 import {
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
+import { computeAccountNetActivityCents } from "@/lib/account-activity";
+import { getPreferredCurrency } from "@/lib/preferences";
 import { getSessionUserId } from "@/lib/session";
 
 const typeSchema = z.enum(FINANCE_ACCOUNT_TYPES);
@@ -179,9 +185,23 @@ export async function createFinancialAccount(
     }
   }
 
+  let encName: string;
+  try {
+    encName = encryptFinancePlaintext(userId, name.trim());
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY (e.g. openssl rand -hex 32) to store account names encrypted.",
+      };
+    }
+    return { error: "Could not encrypt account name. Try again." };
+  }
+
   await getDb().insert(financialAccounts).values({
     userId,
-    name: name.trim(),
+    name: encName,
     type,
     bankKind,
     creditLimitCents,
@@ -365,18 +385,29 @@ export async function getFinancialAccounts() {
     return [];
   }
   const db = getDb();
-  return db.query.financialAccounts.findMany({
+  const rows = await db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
     orderBy: [
       asc(financialAccounts.type),
-      asc(financialAccounts.name),
+      asc(financialAccounts.createdAt),
     ],
   });
+  return rows
+    .map((r) => ({
+      ...r,
+      name: decryptFinancePlaintext(userId, r.name),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export type FinancialAccountWithUsage = Awaited<
   ReturnType<typeof getFinancialAccounts>
->[number] & { usedCreditCents?: number };
+>[number] & {
+  usedCreditCents?: number;
+  /** Net activity (income − expense ± transfers) in `activityCurrency`; bank accounts. */
+  activityNetCents?: number;
+  activityCurrency?: FiatCurrency;
+};
 
 export async function getFinancialAccountsWithUsage(): Promise<
   FinancialAccountWithUsage[]
@@ -385,24 +416,49 @@ export async function getFinancialAccountsWithUsage(): Promise<
   if (!userId) {
     return [];
   }
-  const accounts = await getFinancialAccounts();
+  const [accounts, displayCurrency] = await Promise.all([
+    getFinancialAccounts(),
+    getPreferredCurrency(),
+  ]);
   const out: FinancialAccountWithUsage[] = await Promise.all(
     accounts.map(async (a) => {
-      if (
-        a.type !== "bank" ||
-        a.bankKind !== "credit" ||
-        a.creditLimitCents == null ||
-        a.creditLimitCurrency == null
-      ) {
-        return { ...a };
+      const base: FinancialAccountWithUsage = { ...a };
+
+      if (a.type === "bank" && a.bankKind === "credit") {
+        if (
+          a.creditLimitCents != null &&
+          a.creditLimitCurrency != null
+        ) {
+          const usedCreditCents = await computeCreditUsedCents(
+            userId,
+            a.id,
+            a.creditOpeningBalanceCents,
+            a.creditLimitCurrency as FiatCurrency,
+          );
+          base.usedCreditCents = usedCreditCents;
+        } else {
+          const activityNetCents = await computeAccountNetActivityCents(
+            userId,
+            a.id,
+            displayCurrency,
+          );
+          base.activityNetCents = activityNetCents;
+          base.activityCurrency = displayCurrency;
+        }
+        return base;
       }
-      const usedCreditCents = await computeCreditUsedCents(
-        userId,
-        a.id,
-        a.creditOpeningBalanceCents,
-        a.creditLimitCurrency as FiatCurrency,
-      );
-      return { ...a, usedCreditCents };
+
+      if (a.type === "bank" && a.bankKind === "debit") {
+        const activityNetCents = await computeAccountNetActivityCents(
+          userId,
+          a.id,
+          displayCurrency,
+        );
+        base.activityNetCents = activityNetCents;
+        base.activityCurrency = displayCurrency;
+      }
+
+      return base;
     }),
   );
   return out;

@@ -20,8 +20,15 @@ import {
 } from "@/db/schema";
 import { RECURRING_FREQUENCY_LABELS } from "@/lib/recurring-expense-labels";
 import type { RecurringFrequencyKind } from "@/lib/recurring-expense-labels";
+import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
+import {
+  normalizeLendingPaymentRow,
+  normalizeLendingRow,
+} from "@/lib/lending-crypto";
 import { monthBounds, totalsByCurrency, type FiatCurrency } from "@/lib/money";
 import { SUPPORTED_CURRENCIES } from "@/lib/money";
+import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { decryptTransactionPayload } from "@/lib/transaction-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
@@ -319,8 +326,11 @@ export async function buildFinanceExportXlsxBuffer(
       Kind: tx.kind,
       Amount: tx.amountCents / 100,
       Currency: tx.currency,
+      "Card bill payment": raw.reducesCreditBalance ? "yes" : "",
       Category: category?.name ?? "",
-      Account: financialAccount?.name ?? "",
+      Account: financialAccount
+        ? decryptFinancePlaintext(userId, financialAccount.name)
+        : "",
     };
   });
   appendSheet(wb, "Transactions", transactionExport);
@@ -338,7 +348,7 @@ export async function buildFinanceExportXlsxBuffer(
     wb,
     "Accounts",
     acctRows.map((a) => ({
-      Name: a.name,
+      Name: decryptFinancePlaintext(userId, a.name),
       Type: a.type,
     })),
   );
@@ -357,10 +367,14 @@ export async function buildFinanceExportXlsxBuffer(
       }
       return {
         Date: isoDate(new Date(rest.occurredAt)),
-        Amount: rest.amountCents / 100,
+        Amount:
+          transferAmountCentsFromRow(userId, {
+            amountCents: rest.amountCents,
+            payload,
+          }) / 100,
         Currency: rest.currency,
-        From: fromAccount.name,
-        To: toAccount.name,
+        From: decryptFinancePlaintext(userId, fromAccount.name),
+        To: decryptFinancePlaintext(userId, toAccount.name),
         Description: description,
       };
     })
@@ -371,20 +385,30 @@ export async function buildFinanceExportXlsxBuffer(
     wb,
     "Recurring",
     recurringRows.map((r) => ({
-      Name: r.name,
+      Name: decryptFinancePlaintext(userId, r.name),
       Kind: r.kind,
-      "Amount (fixed)":
-        r.amountCents != null ? r.amountCents / 100 : "",
+      "Amount (fixed)": (() => {
+        const a = resolveRecurringAmountCents(userId, r);
+        return a != null ? a / 100 : "";
+      })(),
       "Variable amount": r.amountVariable ? "Yes" : "No",
       Currency: r.currency,
       Schedule: recurringScheduleText(r),
-      Account: r.financialAccount?.name ?? "",
+      Account: r.financialAccount
+        ? decryptFinancePlaintext(userId, r.financialAccount.name)
+        : "",
       Category: r.category?.name ?? "",
+      "Card bill payment": r.creditPaydown ? "Yes" : "No",
     })),
   );
 
-  const lendingSummary = lendingRows.map((L) => {
-    const paid = L.payments.reduce((s, p) => s + p.amountCents, 0);
+  const lendingSummary = lendingRows.map((raw) => {
+    const { payments, ...lr } = raw;
+    const L = normalizeLendingRow(userId, lr);
+    const paid = payments.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
     const remaining = Math.max(0, L.principalCents - paid);
     return {
       Counterparty: L.counterpartyName,
@@ -401,15 +425,18 @@ export async function buildFinanceExportXlsxBuffer(
   appendSheet(wb, "Lending", lendingSummary);
 
   const paymentLines: Record<string, string | number>[] = [];
-  for (const L of lendingRows) {
-    for (const p of L.payments) {
+  for (const raw of lendingRows) {
+    const { payments, ...lr } = raw;
+    const L = normalizeLendingRow(userId, lr);
+    for (const p of payments) {
+      const np = normalizeLendingPaymentRow(userId, p);
       paymentLines.push({
         Counterparty: L.counterpartyName,
         "Loan kind": L.kind,
-        Amount: p.amountCents / 100,
+        Amount: np.amountCents / 100,
         Currency: L.currency,
-        "Paid date": isoDate(new Date(p.paidAt)),
-        Note: p.note ?? "",
+        "Paid date": isoDate(new Date(np.paidAt)),
+        Note: np.note ?? "",
       });
     }
   }
@@ -448,7 +475,7 @@ async function dbQueryAccounts(userId: string) {
   const db = getDb();
   return db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
-    orderBy: [asc(financialAccounts.type), asc(financialAccounts.name)],
+    orderBy: [asc(financialAccounts.type), asc(financialAccounts.createdAt)],
   });
 }
 
@@ -465,7 +492,7 @@ async function dbQueryRecurring(userId: string) {
   const db = getDb();
   return db.query.recurringExpenses.findMany({
     where: eq(recurringExpenses.userId, userId),
-    orderBy: [asc(recurringExpenses.kind), asc(recurringExpenses.name)],
+    orderBy: [asc(recurringExpenses.kind), asc(recurringExpenses.createdAt)],
     with: { category: true, financialAccount: true },
   });
 }

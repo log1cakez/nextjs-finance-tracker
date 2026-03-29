@@ -32,6 +32,13 @@ export function TransactionForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [kind, setKind] = useState<"income" | "expense">("expense");
   const [currency, setCurrency] = useState<FiatCurrency>(defaultCurrency);
+  const [accountId, setAccountId] = useState<string>("");
+  const selectedAccount = useMemo(
+    () => accountsList.find((a) => a.id === accountId),
+    [accountsList, accountId],
+  );
+  const showCardPaydown =
+    kind === "expense" && selectedAccount?.bankKind === "credit";
 
   const filteredCategories = useMemo(
     () => categoriesList.filter((c) => c.kind === kind),
@@ -45,6 +52,7 @@ export function TransactionForm({
   useEffect(() => {
     if (!state.success) return;
     formRef.current?.reset();
+    setAccountId("");
     router.refresh();
   }, [state.success, router]);
 
@@ -159,8 +167,9 @@ export function TransactionForm({
           <select
             name="financialAccountId"
             required
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
             className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-10 sm:py-2 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-            defaultValue=""
           >
             <option value="" disabled>
               Select account…
@@ -173,6 +182,24 @@ export function TransactionForm({
           </select>
         )}
       </label>
+
+      {showCardPaydown ? (
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            name="creditPaydown"
+            value="on"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-600"
+          />
+          <span>
+            <span className="font-medium">Card bill payment</span>
+            <span className="mt-0.5 block font-normal text-zinc-500 dark:text-zinc-400">
+              Reduces balance owed on this card (not a new purchase). Omitted from
+              month income/expense totals like a transfer.
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       {state.error ? (
         <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>

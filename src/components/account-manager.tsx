@@ -9,6 +9,7 @@ import {
   type FinancialAccountWithUsage,
   type UpdateCreditActionState,
 } from "@/app/actions/financial-accounts";
+import { AccountTransactionLogModal } from "@/components/recent-transactions-log-modal";
 import {
   FINANCE_ACCOUNT_LABELS,
   FINANCE_ACCOUNT_TYPE_ORDER,
@@ -34,6 +35,24 @@ function ordinalDay(n: number): string {
   if (j === 2 && k !== 12) return `${n}nd`;
   if (j === 3 && k !== 13) return `${n}rd`;
   return `${n}th`;
+}
+
+function BankActivityLine({
+  netCents,
+  currency,
+}: {
+  netCents: number;
+  currency: FiatCurrency;
+}) {
+  return (
+    <p className="mt-2 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
+      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+        Recorded activity ({currency})
+      </span>
+      : {formatMoney(netCents, currency)} — net from transactions and recurring
+      logs on this account (matches your preferred currency in the navbar).
+    </p>
+  );
 }
 
 function CreditScheduleLine({
@@ -89,8 +108,9 @@ function CreditUsageBar({
         />
       </div>
       <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-        Charges and recurring logs in {currency} count toward usage. Transfers to this card
-        reduce the balance; transfers from it increase it.
+        New charges (expenses) in {currency} increase usage. Card bill payments marked when
+        you log, transfers to this card, and income on the card reduce it; transfers from it
+        increase it.
       </p>
     </div>
   );
@@ -464,6 +484,14 @@ export function AccountManager({
                           />
                         ) : null}
                         {a.type === "bank" &&
+                        typeof a.activityNetCents === "number" &&
+                        a.activityCurrency ? (
+                          <BankActivityLine
+                            netCents={a.activityNetCents}
+                            currency={a.activityCurrency}
+                          />
+                        ) : null}
+                        {a.type === "bank" &&
                         a.bankKind === "credit" &&
                         (a.creditStatementDayOfMonth != null ||
                           a.creditPaymentDueDayOfMonth != null) ? (
@@ -474,15 +502,21 @@ export function AccountManager({
                         ) : null}
                         <BankCreditEditForm account={a} />
                       </div>
-                      <form action={deleteFinancialAccount} className="shrink-0">
-                        <input type="hidden" name="id" value={a.id} />
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
-                        >
-                          Remove
-                        </button>
-                      </form>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <AccountTransactionLogModal
+                          accountId={a.id}
+                          accountName={a.name}
+                        />
+                        <form action={deleteFinancialAccount}>
+                          <input type="hidden" name="id" value={a.id} />
+                          <button
+                            type="submit"
+                            className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </div>
                     </div>
                   </li>
                 ))}

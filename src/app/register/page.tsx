@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { AuthPageLogo } from "@/components/auth-page-logo";
+import { AuthPageQuote } from "@/components/auth-page-quote";
 import { RegisterForm } from "@/components/register-form";
 import { REGISTER_INTRO } from "@/lib/brand";
 
@@ -12,6 +14,7 @@ export default async function RegisterPage() {
 
   return (
     <div className="mx-auto w-full max-w-md space-y-6 sm:space-y-8">
+      <AuthPageLogo />
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl dark:text-zinc-50">
           Register
@@ -30,6 +33,7 @@ export default async function RegisterPage() {
           Sign in
         </Link>
       </p>
+      <AuthPageQuote />
     </div>
   );
 }

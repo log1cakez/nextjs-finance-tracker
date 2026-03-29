@@ -179,6 +179,8 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   name: text("name").notNull(),
   /** Null when `amountVariable` is true (e.g. credit card — amount entered when logging). */
   amountCents: integer("amount_cents"),
+  /** Encrypted JSON `{ amountCents }` for fixed templates; when set, `amount_cents` is null. */
+  amountPayload: text("amount_payload"),
   amountVariable: boolean("amount_variable").notNull().default(false),
   currency: transactionCurrency("currency").notNull().default("USD"),
   categoryId: uuid("category_id").references(() => categories.id, {
@@ -187,6 +189,8 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   financialAccountId: uuid("financial_account_id")
     .notNull()
     .references(() => financialAccounts.id, { onDelete: "restrict" }),
+  /** Expense on credit card: logs reduce balance owed (payment), not a new charge. */
+  creditPaydown: boolean("credit_paydown").notNull().default(false),
   frequency: recurringFrequency("frequency").notNull(),
   dueDayOfMonth: integer("due_day_of_month"),
   /** Second calendar day for `semimonthly` (e.g. second pay run); null otherwise. */
@@ -207,7 +211,8 @@ export const accountTransfers = pgTable("account_transfers", {
   toFinancialAccountId: uuid("to_financial_account_id")
     .notNull()
     .references(() => financialAccounts.id, { onDelete: "restrict" }),
-  amountCents: integer("amount_cents").notNull(),
+  /** Null for new rows; amount lives only in encrypted `payload`. Legacy rows may still set this. */
+  amountCents: integer("amount_cents"),
   currency: transactionCurrency("currency").notNull().default("USD"),
   payload: text("payload").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
@@ -223,9 +228,16 @@ export const lendings = pgTable("lendings", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  counterpartyName: text("counterparty_name").notNull(),
+  /**
+   * Encrypted JSON at rest (`encryptFinanceObject`): counterpartyName, principalCents, notes.
+   * When set, legacy plaintext columns are null.
+   */
+  financePayload: text("finance_payload"),
+  /** Legacy plaintext; prefer `financePayload` for new rows. */
+  counterpartyName: text("counterparty_name"),
   kind: lendingKind("kind").notNull(),
-  principalCents: integer("principal_cents").notNull(),
+  /** Legacy plaintext principal; null when using `financePayload`. */
+  principalCents: integer("principal_cents"),
   currency: transactionCurrency("currency").notNull().default("USD"),
   repaymentStyle: lendingRepaymentStyle("repayment_style")
     .notNull()
@@ -240,7 +252,9 @@ export const lendingPayments = pgTable("lending_payments", {
   lendingId: uuid("lending_id")
     .notNull()
     .references(() => lendings.id, { onDelete: "cascade" }),
-  amountCents: integer("amount_cents").notNull(),
+  /** Encrypted JSON: amountCents, note. When set, legacy amount/note are null. */
+  financePayload: text("finance_payload"),
+  amountCents: integer("amount_cents"),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -265,6 +279,11 @@ export const transactions = pgTable("transactions", {
     () => financialAccounts.id,
     { onDelete: "restrict" },
   ),
+  /**
+   * When true (expense on a credit card): reduces utilization / balance owed
+   * (bill payment), instead of increasing it like a purchase.
+   */
+  reducesCreditBalance: boolean("reduces_credit_balance").notNull().default(false),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

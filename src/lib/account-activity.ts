@@ -6,19 +6,17 @@ import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 /**
- * Outstanding balance on a credit card (minor units), for one currency.
- * Normal expenses increase balance; expenses flagged as card bill payments decrease it.
- * Other income and transfers **to** the card decrease it; transfers **from** increase it.
- * Includes `openingBalanceCents` for debt before in-app tracking.
+ * Net change from recorded activity on a bank-style account in one currency
+ * (income − expenses, plus transfers in − transfers out). Matches how recurring
+ * logs post: they create transactions on this account and therefore affect this sum.
  */
-export async function computeCreditUsedCents(
+export async function computeAccountNetActivityCents(
   userId: string,
   financialAccountId: string,
-  openingBalanceCents: number,
-  limitCurrency: FiatCurrency,
+  currency: FiatCurrency,
 ): Promise<number> {
   const db = getDb();
-  let used = openingBalanceCents;
+  let net = 0;
 
   const txs = await db.query.transactions.findMany({
     where: and(
@@ -28,13 +26,10 @@ export async function computeCreditUsedCents(
   });
   for (const row of txs) {
     const tx = toDecryptedTransaction(userId, row);
-    if (tx.currency !== limitCurrency) continue;
-    if (tx.kind === "expense") {
-      if (row.reducesCreditBalance) used -= tx.amountCents;
-      else used += tx.amountCents;
-    } else {
-      used -= tx.amountCents;
-    }
+    if (tx.currency !== currency) continue;
+    if (tx.kind === "income") net += tx.amountCents;
+    else if (row.reducesCreditBalance) net += tx.amountCents;
+    else net -= tx.amountCents;
   }
 
   const transfers = await db.query.accountTransfers.findMany({
@@ -47,14 +42,11 @@ export async function computeCreditUsedCents(
     ),
   });
   for (const t of transfers) {
-    if (t.currency !== limitCurrency) continue;
+    if (t.currency !== currency) continue;
     const amt = transferAmountCentsFromRow(userId, t);
-    if (t.fromFinancialAccountId === financialAccountId) {
-      used += amt;
-    } else {
-      used -= amt;
-    }
+    if (t.fromFinancialAccountId === financialAccountId) net -= amt;
+    else net += amt;
   }
 
-  return used;
+  return net;
 }

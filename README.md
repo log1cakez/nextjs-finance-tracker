@@ -12,7 +12,7 @@ Personal finance web app: accounts, transactions, recurring templates, transfers
 - **Lending** — **Receivables** (others owe you) and **payables** (you owe others); lump-sum or installment-style tracking with payment history.
 - **Categories** — Income and expense categories.
 - **Auth** — Email/password (credentials) and optional Google OAuth; password reset via email OTP (SMTP or Resend).
-- **Excel export** — Signed-in users can download a multi-sheet workbook (dashboard-style calculations, activity by account, cashflow trend, and raw data). Filename pattern: `MIDAS_FinanceTracker_<name>_<date>.xlsx`. Available from the dashboard, transactions page, and account menu.
+- **Excel export** — Signed-in users can download a multi-sheet workbook (dashboard-style calculations, activity by account, cashflow trend, and raw data). Filename pattern: `MIDAS_FinanceTracker_<name>_<date>.xlsx`. Open your name menu (top bar) → **Export Excel (.xlsx)** (below Account).
 
 ## Tech stack
 
@@ -94,6 +94,7 @@ Comments in `.env.example` describe Gmail SMTP, Resend, and optional overrides.
 
 ## Excel export
 
+- **UI:** Top bar → click your display name → **Export Excel (.xlsx)** (under Account, above Sign out).
 - **Route:** `GET /api/export/excel` (requires an authenticated session; returns `401` JSON if not signed in).
 - The workbook includes dashboard-aligned summaries plus detail sheets (transactions, categories, accounts, transfers, recurring, lending). Amounts are numeric for spreadsheet use.
 

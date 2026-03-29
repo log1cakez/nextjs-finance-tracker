@@ -4,6 +4,7 @@ import {
   startTransition,
   useActionState,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -49,6 +50,7 @@ type RecurringRow = {
   dueWeekday: number | null;
   category: (typeof categories.$inferSelect) | null;
   financialAccount: (typeof financialAccounts.$inferSelect) | null;
+  creditPaydown?: boolean;
 };
 
 function logsAmountEachTime(row: RecurringRow): boolean {
@@ -107,83 +109,122 @@ function FrequencyGroups({
             </p>
           ) : (
             <ul className="mt-3 space-y-3">
-              {group.map((row) => (
-                <li
-                  key={row.id}
-                  className="rounded-lg bg-zinc-50 px-3 py-3 dark:bg-zinc-900/50"
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                        {row.name}
-                      </p>
-                      <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">
-                        {logsAmountEachTime(row) ? (
-                          <span className="italic text-zinc-600 dark:text-zinc-400">
-                            Amount varies — enter when you log
-                          </span>
-                        ) : (
-                          <span className="tabular-nums">
-                            {formatMoney(
-                              row.amountCents!,
-                              row.currency as FiatCurrency,
-                            )}
-                          </span>
-                        )}
-                        {row.financialAccount
-                          ? ` · ${row.financialAccount.name}`
-                          : ""}
-                        {row.category ? ` · ${row.category.name}` : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        {scheduleSummary(row)}
-                      </p>
-                    </div>
-                    <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:shrink-0">
-                      <form
-                        action={logRecurringExpense}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <input type="hidden" name="id" value={row.id} />
-                        {logsAmountEachTime(row) ? (
-                          <input
-                            name="amount"
-                            type="text"
-                            inputMode="decimal"
-                            required
-                            placeholder="Amount"
-                            autoComplete="off"
-                            className="min-h-9 w-[6.5rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
-                          />
+              {group.map((row) => {
+                const accName = row.financialAccount?.name;
+                const catName = row.category?.name;
+                const fin = row.financialAccount;
+                const creditCurrencyMismatch =
+                  fin?.bankKind === "credit" &&
+                  fin.creditLimitCurrency != null &&
+                  row.currency !== fin.creditLimitCurrency;
+                const variable = logsAmountEachTime(row);
+                const paydownNote = row.creditPaydown
+                  ? "Card bill payment — reduces balance owed"
+                  : null;
+                const variableMetaLine = variable
+                  ? [
+                      "Amount varies — enter when you log",
+                      paydownNote,
+                      accName ?? null,
+                      catName ?? null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "";
+
+                return (
+                  <li
+                    key={row.id}
+                    className="min-w-0 rounded-lg bg-zinc-50 px-3 py-3 dark:bg-zinc-900/50"
+                  >
+                    <div className="flex min-w-0 flex-col gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-zinc-900 dark:text-zinc-50">
+                          {row.name}
+                        </p>
+                        <p className="mt-1 break-words text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                          {variable ? (
+                            <span className="italic text-zinc-600 dark:text-zinc-400">
+                              {variableMetaLine}
+                            </span>
+                          ) : (
+                            <>
+                              <span className="tabular-nums">
+                                {formatMoney(
+                                  row.amountCents!,
+                                  row.currency as FiatCurrency,
+                                )}
+                              </span>
+                              {row.creditPaydown
+                                ? " · Card bill payment (reduces balance)"
+                                : ""}
+                              {accName ? ` · ${accName}` : ""}
+                              {catName ? ` · ${catName}` : ""}
+                            </>
+                          )}
+                        </p>
+                        <p className="mt-1 break-words text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                          {scheduleSummary(row)}
+                        </p>
+                        {creditCurrencyMismatch ? (
+                          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                            Template currency ({row.currency}) does not match this
+                            card’s limit currency ({fin!.creditLimitCurrency}). Remove
+                            this template and add it again with matching currency so
+                            logs update utilization on Accounts.
+                          </p>
                         ) : null}
-                        <input
-                          type="date"
-                          name="occurredAt"
-                          defaultValue={today}
-                          className="min-h-9 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      </div>
+                      <div className="flex min-w-0 w-full flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700/80 sm:flex-row sm:flex-wrap sm:items-end">
+                        <form
+                          action={logRecurringExpense}
+                          className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:w-auto"
                         >
-                          {row.kind === "income"
-                            ? "Log income"
-                            : "Log expense"}
-                        </button>
-                      </form>
-                      <form action={deleteRecurringExpense} className="inline-flex">
-                        <input type="hidden" name="id" value={row.id} />
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
+                          <input type="hidden" name="id" value={row.id} />
+                          {variable ? (
+                            <input
+                              name="amount"
+                              type="text"
+                              inputMode="decimal"
+                              required
+                              placeholder="Amount"
+                              autoComplete="off"
+                              className="min-h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-[7.5rem] sm:max-w-[10rem] sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                            />
+                          ) : null}
+                          <input
+                            type="date"
+                            name="occurredAt"
+                            defaultValue={today}
+                            className="min-h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-auto sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                          />
+                          <button
+                            type="submit"
+                            disabled={creditCurrencyMismatch}
+                            className="min-h-10 w-full shrink-0 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9 sm:w-auto sm:px-2.5 sm:py-1.5 sm:text-xs dark:bg-zinc-100 dark:text-zinc-900"
+                          >
+                            {row.kind === "income"
+                              ? "Log income"
+                              : "Log expense"}
+                          </button>
+                        </form>
+                        <form
+                          action={deleteRecurringExpense}
+                          className="flex sm:inline-flex"
                         >
-                          Remove
-                        </button>
-                      </form>
+                          <input type="hidden" name="id" value={row.id} />
+                          <button
+                            type="submit"
+                            className="min-h-10 w-full text-sm font-medium text-zinc-500 hover:text-rose-600 sm:min-h-0 sm:w-auto sm:text-xs dark:text-zinc-400 dark:hover:text-rose-400"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -213,6 +254,13 @@ export function RecurringExpenseManager({
   const [frequency, setFrequency] = useState<string>("");
   const [recKind, setRecKind] = useState<RecurringKind>("expense");
   const [variableAmount, setVariableAmount] = useState(false);
+  const [templateAccountId, setTemplateAccountId] = useState<string>("");
+  const templateAccount = useMemo(
+    () => accountsList.find((a) => a.id === templateAccountId),
+    [accountsList, templateAccountId],
+  );
+  const showTemplateCardPaydown =
+    recKind === "expense" && templateAccount?.bankKind === "credit";
 
   useEffect(() => {
     if (!state.success) return;
@@ -221,6 +269,7 @@ export function RecurringExpenseManager({
       setFrequency("");
       setRecKind("expense");
       setVariableAmount(false);
+      setTemplateAccountId("");
     });
   }, [state.success]);
 
@@ -257,7 +306,9 @@ export function RecurringExpenseManager({
           <span className="font-medium text-zinc-700 dark:text-zinc-300">
             Log
           </span>{" "}
-          creates a real transaction on the date you choose. Use{" "}
+          creates a real transaction on the linked account (same as manual
+          transactions — credit utilization and debit activity on Accounts update).
+          Use{" "}
           <span className="font-medium text-zinc-700 dark:text-zinc-300">
             variable amount
           </span>{" "}
@@ -350,6 +401,24 @@ export function RecurringExpenseManager({
             </span>
           </label>
 
+          {showTemplateCardPaydown ? (
+            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 sm:col-span-2 dark:text-zinc-300">
+              <input
+                type="checkbox"
+                name="creditPaydown"
+                value="on"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-600"
+              />
+              <span>
+                <span className="font-medium">Card bill payment template</span>
+                <span className="mt-0.5 block font-normal text-zinc-500 dark:text-zinc-400">
+                  Each log reduces the balance owed on this card (paying the bill),
+                  instead of counting as a new charge.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Category (optional)
             <select
@@ -384,8 +453,9 @@ export function RecurringExpenseManager({
               <select
                 name="financialAccountId"
                 required
+                value={templateAccountId}
+                onChange={(e) => setTemplateAccountId(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-                defaultValue=""
               >
                 <option value="" disabled>
                   Select account…

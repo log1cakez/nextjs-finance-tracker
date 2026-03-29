@@ -21,7 +21,8 @@ export default async function AccountsPage({
         </h1>
         <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
           Banks, crypto, forex, business, and cash — use these when recording
-          transactions.
+          transactions and recurring logs. For credit cards, template currency must
+          match the card’s limit currency so usage stays accurate.
         </p>
       </div>
 
