@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import {
   computeDashboardOverviewByCurrency,
-  computeTransactionBuckets,
+  mergeTransactionBucketsWithAccountOpenings,
 } from "@/app/actions/dashboard-overview";
 import {
   computeMonthlyCashflowTrend,
@@ -100,7 +100,7 @@ export async function buildFinanceExportXlsxBuffer(
     lendingRows,
   ] = await Promise.all([
     computeDashboardOverviewByCurrency(userId),
-    computeTransactionBuckets(userId),
+    mergeTransactionBucketsWithAccountOpenings(userId),
     computeTransactionsForMonthRange(userId, monthStart, monthEnd),
     computeMonthlyCashflowTrend(userId, "USD", 6),
     computeMonthlyCashflowTrend(userId, "PHP", 6),
@@ -154,13 +154,14 @@ export async function buildFinanceExportXlsxBuffer(
       Metric: "Assets (from activity)",
       USD: minorToMajor(usd.assetsFromActivityMinor),
       PHP: minorToMajor(php.assetsFromActivityMinor),
-      Notes: "Positive per-account nets + lending receivables",
+      Notes: "Per-account transaction nets + starting balances + lending receivables",
     },
     {
       Metric: "Liabilities (from activity)",
       USD: minorToMajor(usd.liabilitiesFromActivityMinor),
       PHP: minorToMajor(php.liabilitiesFromActivityMinor),
-      Notes: "Negative per-account nets + lending payables",
+      Notes:
+        "Credit card utilization + other nets + lending payables (see breakdown rows)",
     },
     {
       Metric: "Net position (assets − liabilities)",
@@ -170,7 +171,20 @@ export async function buildFinanceExportXlsxBuffer(
       PHP: minorToMajor(
         php.assetsFromActivityMinor - php.liabilitiesFromActivityMinor,
       ),
-      Notes: "Transactions + lending combined",
+      Notes: "Includes credit utilization and lending",
+    },
+    { Metric: "", USD: "", PHP: "", Notes: "" },
+    {
+      Metric: "— Credit cards (subset of liabilities) —",
+      USD: "",
+      PHP: "",
+      Notes: "",
+    },
+    {
+      Metric: "Credit card balances owed (in liabilities total)",
+      USD: minorToMajor(usd.creditCardOutstandingMinor),
+      PHP: minorToMajor(php.creditCardOutstandingMinor),
+      Notes: "Cards with limit set; utilization matches Accounts page",
     },
     { Metric: "", USD: "", PHP: "", Notes: "" },
     {
@@ -285,12 +299,13 @@ export async function buildFinanceExportXlsxBuffer(
 
   const activityRows = Array.from(buckets.values())
     .map((b) => {
-      const net = b.income - b.expense;
+      const net = b.income - b.expense + b.openingMinor;
       return {
         Account: b.accountName,
         Currency: b.currency,
         Income: minorToMajor(b.income),
         Expense: minorToMajor(b.expense),
+        "Starting balance": minorToMajor(b.openingMinor),
         Net: minorToMajor(net),
         "Counts toward":
           net >= 0 ? "Assets (from activity)" : "Liabilities (from activity)",
@@ -350,6 +365,9 @@ export async function buildFinanceExportXlsxBuffer(
     acctRows.map((a) => ({
       Name: decryptFinancePlaintext(userId, a.name),
       Type: a.type,
+      "Starting balance":
+        a.openingBalanceCents != null ? a.openingBalanceCents / 100 : "",
+      "Starting balance currency": a.openingBalanceCurrency ?? "",
     })),
   );
 

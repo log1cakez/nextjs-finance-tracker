@@ -21,6 +21,7 @@ import {
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
 } from "@/lib/money";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   RECURRING_FREQUENCY_LABELS,
   RECURRING_FREQUENCIES,
@@ -343,6 +344,9 @@ export function RecurringExpenseManager({
                   ? "Rent, gym, streaming…"
                   : "Paycheck, dividends…"
               }
+              onBlur={(e) => {
+                e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+              }}
             />
           </label>
 

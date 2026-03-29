@@ -7,7 +7,7 @@ export function SiteFooter() {
 
   return (
     <footer
-      className="mt-auto border-t border-zinc-200/80 pt-8 dark:border-zinc-800/80"
+      className="mt-auto pt-8"
       role="contentinfo"
     >
       <div className="mx-auto max-w-5xl px-3 pb-2 text-center sm:px-6">

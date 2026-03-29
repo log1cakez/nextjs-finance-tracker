@@ -8,6 +8,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -21,6 +22,7 @@ export const financialAccountType = pgEnum("financial_account_type", [
   "forex",
   "business",
   "cash",
+  "ewallet",
   "other",
 ]);
 
@@ -131,15 +133,48 @@ export const authenticators = pgTable(
   }),
 );
 
-export const categories = pgTable("categories", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  kind: transactionKind("kind").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+/**
+ * Shared category labels (one row per normalized name + kind). User rows in `categories`
+ * reference a definition so identical names across users reuse the same definition.
+ */
+export const categoryDefinitions = pgTable(
+  "category_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Display label (canonical casing from first creator or adopter). */
+    name: text("name").notNull(),
+    /** `lower(trim(name))` with collapsed spaces — unique with `kind`. */
+    nameKey: text("name_key").notNull(),
+    kind: transactionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    nameKeyKindUq: uniqueIndex("category_definitions_name_key_kind").on(t.nameKey, t.kind),
+  }),
+);
+
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    definitionId: uuid("definition_id")
+      .notNull()
+      .references(() => categoryDefinitions.id, { onDelete: "restrict" }),
+    /** Denormalized from the definition for queries and display. */
+    name: text("name").notNull(),
+    kind: transactionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userDefinitionUq: uniqueIndex("categories_user_definition_idx").on(
+      t.userId,
+      t.definitionId,
+    ),
+  }),
+);
 
 /** User-defined accounts: banks, crypto, forex, business, etc. (not OAuth.) */
 export const financialAccounts = pgTable("financial_accounts", {
@@ -163,6 +198,12 @@ export const financialAccounts = pgTable("financial_accounts", {
   creditStatementDayOfMonth: integer("credit_statement_day_of_month"),
   /** Payment due day of month (1–31); credit accounts only. */
   creditPaymentDueDayOfMonth: integer("credit_payment_due_day_of_month"),
+  /**
+   * Cash held when you started tracking (debit bank, e-wallet, crypto, etc.).
+   * Not used for credit cards (use credit opening balance owed instead).
+   */
+  openingBalanceCents: integer("opening_balance_cents"),
+  openingBalanceCurrency: transactionCurrency("opening_balance_currency"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -312,8 +353,19 @@ export const authenticatorsRelations = relations(authenticators, ({ one }) => ({
   user: one(users, { fields: [authenticators.userId], references: [users.id] }),
 }));
 
+export const categoryDefinitionsRelations = relations(
+  categoryDefinitions,
+  ({ many }) => ({
+    categories: many(categories),
+  }),
+);
+
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   user: one(users, { fields: [categories.userId], references: [users.id] }),
+  definition: one(categoryDefinitions, {
+    fields: [categories.definitionId],
+    references: [categoryDefinitions.id],
+  }),
   transactions: many(transactions),
   recurringExpenses: many(recurringExpenses),
 }));
@@ -405,6 +457,7 @@ export const schema = {
   passwordResetOtps,
   authenticators,
   categories,
+  categoryDefinitions,
   financialAccounts,
   recurringExpenses,
   accountTransfers,
@@ -416,6 +469,7 @@ export const schema = {
   sessionsRelations,
   authenticatorsRelations,
   categoriesRelations,
+  categoryDefinitionsRelations,
   financialAccountsRelations,
   recurringExpensesRelations,
   accountTransfersRelations,

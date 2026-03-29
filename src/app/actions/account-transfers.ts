@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { accountTransfers, financialAccounts } from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
@@ -103,7 +104,10 @@ export async function createAccountTransfer(
 
   const baseLabel = `Transfer: ${decryptFinancePlaintext(userId, from.name)} → ${decryptFinancePlaintext(userId, to.name)}`;
   const note = parsed.data.note?.trim();
-  const description = note ? `${baseLabel} — ${note}` : baseLabel;
+  const noteFormatted = note ? formatTypedLabel(note) : "";
+  const description = noteFormatted
+    ? `${baseLabel} — ${noteFormatted}`
+    : baseLabel;
 
   let payload: string;
   try {

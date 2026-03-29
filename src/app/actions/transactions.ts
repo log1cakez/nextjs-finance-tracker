@@ -13,6 +13,7 @@ import {
   type FiatCurrency,
 } from "@/lib/money";
 import { getPreferredCurrency } from "@/lib/preferences";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import { encryptTransactionPayload } from "@/lib/transaction-crypto";
 import {
   toDecryptedTransaction,
@@ -144,10 +145,15 @@ export async function createTransaction(
     reducesCreditBalance = true;
   }
 
+  const description = formatTypedLabel(parsed.data.description.trim());
+  if (!description) {
+    return { error: "Description is required" };
+  }
+
   let payload: string;
   try {
     payload = encryptTransactionPayload(userId, {
-      description: parsed.data.description.trim(),
+      description,
       amountCents: minor,
     });
   } catch (e) {

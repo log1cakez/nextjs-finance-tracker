@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 const emptyOverview: CurrencyOverview = {
   assetsFromActivityMinor: 0,
   liabilitiesFromActivityMinor: 0,
+  creditCardOutstandingMinor: 0,
   lendingReceivablesOutstandingMinor: 0,
   lendingPayablesOutstandingMinor: 0,
   projectedIncomeMinor: 0,
@@ -47,6 +48,7 @@ export default async function DashboardPage() {
   const showOtherCurrency =
     otherOverview.assetsFromActivityMinor > 0 ||
     otherOverview.liabilitiesFromActivityMinor > 0 ||
+    otherOverview.creditCardOutstandingMinor > 0 ||
     otherOverview.projectedIncomeMinor > 0 ||
     otherOverview.projectedExpenseMinor > 0 ||
     otherOverview.projectedIncomeYearlyMinor > 0 ||

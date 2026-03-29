@@ -15,6 +15,7 @@ import {
   type TransferListItem,
 } from "@/app/actions/account-transfers";
 import type { financialAccounts } from "@/db/schema";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   formatMoney,
   SUPPORTED_CURRENCIES,
@@ -159,6 +160,10 @@ export function TransferManager({
                 maxLength={500}
                 className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
                 placeholder="e.g. allowance, rebalance…"
+                onBlur={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  if (v) e.currentTarget.value = formatTypedLabel(v);
+                }}
               />
             </label>
           </div>

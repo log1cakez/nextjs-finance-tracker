@@ -81,7 +81,7 @@ export function AccountTransactionLogModal({
             <dialog
               ref={dialogRef}
               aria-labelledby={`tx-log-title-${accountId}`}
-              className="fixed left-1/2 top-1/2 z-[200] m-0 flex max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem))] min-h-[18rem] w-[min(26rem,calc(100vw-1.25rem))] max-w-[calc(100vw-1.25rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/50 backdrop:backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 sm:w-[min(30rem,calc(100vw-2rem))] sm:max-w-[min(30rem,calc(100vw-2rem))] md:max-w-xl md:w-[min(36rem,calc(100vw-2.5rem))]"
+              className="fixed left-1/2 top-1/2 z-[200] m-0 max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem))] min-h-[18rem] w-[min(26rem,calc(100vw-1.25rem))] max-w-[calc(100vw-1.25rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/50 backdrop:backdrop-blur-sm [&:not([open])]:hidden [&[open]]:flex [&[open]]:flex-col dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 sm:w-[min(30rem,calc(100vw-2rem))] sm:max-w-[min(30rem,calc(100vw-2rem))] md:max-w-xl md:w-[min(36rem,calc(100vw-2.5rem))]"
               onClose={() => {
                 setItems(null);
                 setError(null);

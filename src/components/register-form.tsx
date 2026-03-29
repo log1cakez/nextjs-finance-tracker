@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { registerUser, type RegisterState } from "@/app/actions/register";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: RegisterState = {};
 
@@ -49,6 +50,10 @@ export function RegisterForm() {
           autoComplete="name"
           className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
           placeholder="Your name"
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim();
+            if (v) e.currentTarget.value = formatTypedLabel(v);
+          }}
         />
       </label>
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">

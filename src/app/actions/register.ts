@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const registerSchema = z.object({
   name: z.string().max(120).optional(),
@@ -40,10 +41,11 @@ export async function registerUser(
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  const name =
-    parsed.data.name?.trim() ||
-    email.split("@")[0]?.slice(0, 80) ||
-    "User";
+  const rawName = parsed.data.name?.trim();
+  const name = rawName
+    ? formatTypedLabel(rawName) ||
+      (email.split("@")[0]?.slice(0, 80) ?? "User")
+    : email.split("@")[0]?.slice(0, 80) || "User";
 
   await db.insert(users).values({
     email,

@@ -20,6 +20,7 @@ import {
   type FiatCurrency,
 } from "@/lib/money";
 import { getPreferredCurrency } from "@/lib/preferences";
+import { formatTypedBlock, formatTypedLabel } from "@/lib/typed-label-format";
 
 const kindSchema = z.enum(["receivable", "payable"]);
 const styleSchema = z.enum(["lump_sum", "installment"]);
@@ -118,12 +119,20 @@ export async function createLending(
     return { error: "Invalid start date" };
   }
 
+  const counterparty = formatTypedLabel(parsed.data.counterpartyName.trim());
+  if (!counterparty) {
+    return { error: "Counterparty name is required" };
+  }
+  const notesFormatted = parsed.data.notes?.trim()
+    ? formatTypedBlock(parsed.data.notes.trim())
+    : null;
+
   let financePayload: string;
   try {
     financePayload = encryptFinanceObject(userId, {
-      counterpartyName: parsed.data.counterpartyName.trim(),
+      counterpartyName: counterparty,
       principalCents: minor,
-      notes: parsed.data.notes?.trim() || null,
+      notes: notesFormatted,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -240,11 +249,15 @@ export async function addLendingPayment(
     };
   }
 
+  const payNote = parsed.data.note?.trim()
+    ? formatTypedLabel(parsed.data.note.trim())
+    : null;
+
   let financePayload: string;
   try {
     financePayload = encryptFinanceObject(userId, {
       amountCents: minor,
-      note: parsed.data.note?.trim() || null,
+      note: payNote,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

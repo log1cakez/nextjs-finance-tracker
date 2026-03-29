@@ -12,6 +12,7 @@ import {
   transactions,
 } from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
@@ -245,9 +246,14 @@ export async function createRecurringExpense(
     categoryId = cat.id;
   }
 
+  const templateName = formatTypedLabel(parsed.data.name.trim());
+  if (!templateName) {
+    return { error: "Name is required" };
+  }
+
   let encName: string;
   try {
-    encName = encryptFinancePlaintext(userId, parsed.data.name.trim());
+    encName = encryptFinancePlaintext(userId, templateName);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {

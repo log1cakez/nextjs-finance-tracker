@@ -2,7 +2,12 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { lendings, recurringExpenses, transactions } from "@/db/schema";
+import {
+  financialAccounts,
+  lendings,
+  recurringExpenses,
+  transactions,
+} from "@/db/schema";
 import { getSessionUserId } from "@/lib/session";
 import type { FiatCurrency } from "@/lib/money";
 import { SUPPORTED_CURRENCIES } from "@/lib/money";
@@ -17,11 +22,14 @@ import {
   normalizeLendingRow,
 } from "@/lib/lending-crypto";
 import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
+import { computeCreditUsedCents } from "@/lib/credit-utilization";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 export type CurrencyOverview = {
   assetsFromActivityMinor: number;
   liabilitiesFromActivityMinor: number;
+  /** Credit card balances owed (limit-currency utilization), included in liabilities. */
+  creditCardOutstandingMinor: number;
   /** Outstanding principal still owed to you (receivables), after recorded payments. */
   lendingReceivablesOutstandingMinor: number;
   /** Outstanding principal you still owe (payables), after recorded payments. */
@@ -36,6 +44,7 @@ function emptyOverview(): CurrencyOverview {
   return {
     assetsFromActivityMinor: 0,
     liabilitiesFromActivityMinor: 0,
+    creditCardOutstandingMinor: 0,
     lendingReceivablesOutstandingMinor: 0,
     lendingPayablesOutstandingMinor: 0,
     projectedIncomeMinor: 0,
@@ -48,12 +57,14 @@ function emptyOverview(): CurrencyOverview {
 export type TransactionActivityBucket = {
   income: number;
   expense: number;
+  /** Starting balance on cash-like accounts (minor units); matches Accounts page. */
+  openingMinor: number;
   accountName: string;
   currency: FiatCurrency;
 };
 
 /**
- * Per account+currency income/expense from transactions (same buckets as dashboard position).
+ * Per account+currency income/expense from transactions (before starting balances).
  */
 export async function computeTransactionBuckets(
   userId: string,
@@ -81,6 +92,7 @@ export async function computeTransactionBuckets(
       b = {
         income: 0,
         expense: 0,
+        openingMinor: 0,
         accountName: row.financialAccount
           ? decryptFinancePlaintext(userId, row.financialAccount.name)
           : "(Unassigned)",
@@ -98,6 +110,50 @@ export async function computeTransactionBuckets(
   return netByBucket;
 }
 
+async function applyAccountOpeningBalancesToBuckets(
+  userId: string,
+  netByBucket: Map<string, TransactionActivityBucket>,
+): Promise<void> {
+  const db = getDb();
+  const accounts = await db.query.financialAccounts.findMany({
+    where: eq(financialAccounts.userId, userId),
+  });
+  for (const a of accounts) {
+    if (a.type === "bank" && a.bankKind === "credit") {
+      continue;
+    }
+    if (a.openingBalanceCents == null || a.openingBalanceCurrency == null) {
+      continue;
+    }
+    const c = a.openingBalanceCurrency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) {
+      continue;
+    }
+    const bucketKey = `${a.id}|${c}`;
+    let b = netByBucket.get(bucketKey);
+    if (!b) {
+      b = {
+        income: 0,
+        expense: 0,
+        openingMinor: 0,
+        accountName: decryptFinancePlaintext(userId, a.name),
+        currency: c,
+      };
+      netByBucket.set(bucketKey, b);
+    }
+    b.openingMinor = a.openingBalanceCents;
+  }
+}
+
+/** Transaction buckets plus starting balances (e-wallet, debit bank, etc.); used for position. */
+export async function mergeTransactionBucketsWithAccountOpenings(
+  userId: string,
+): Promise<Map<string, TransactionActivityBucket>> {
+  const netByBucket = await computeTransactionBuckets(userId);
+  await applyAccountOpeningBalancesToBuckets(userId, netByBucket);
+  return netByBucket;
+}
+
 /** Dashboard position & recurring projections by currency (matches UI). */
 export async function computeDashboardOverviewByCurrency(
   userId: string,
@@ -107,10 +163,30 @@ export async function computeDashboardOverviewByCurrency(
     PHP: emptyOverview(),
   };
 
-  const netByBucket = await computeTransactionBuckets(userId);
+  const netByBucket = await mergeTransactionBucketsWithAccountOpenings(userId);
 
-  for (const [, b] of netByBucket) {
-    const net = b.income - b.expense;
+  const db = getDb();
+  const finAccounts = await db.query.financialAccounts.findMany({
+    where: eq(financialAccounts.userId, userId),
+  });
+  const creditCardWithLimitIds = new Set(
+    finAccounts
+      .filter(
+        (a) =>
+          a.type === "bank" &&
+          a.bankKind === "credit" &&
+          a.creditLimitCents != null &&
+          a.creditLimitCurrency != null,
+      )
+      .map((a) => a.id),
+  );
+
+  for (const [bucketKey, b] of netByBucket) {
+    const accountId = bucketKey.split("|")[0];
+    if (creditCardWithLimitIds.has(accountId)) {
+      continue;
+    }
+    const net = b.income - b.expense + b.openingMinor;
     if (net >= 0) {
       byCurrency[b.currency].assetsFromActivityMinor += net;
     } else {
@@ -118,7 +194,31 @@ export async function computeDashboardOverviewByCurrency(
     }
   }
 
-  const db = getDb();
+  const creditCardsForUtilization = finAccounts.filter(
+    (a) =>
+      a.type === "bank" &&
+      a.bankKind === "credit" &&
+      a.creditLimitCents != null &&
+      a.creditLimitCurrency != null &&
+      SUPPORTED_CURRENCIES.includes(a.creditLimitCurrency as FiatCurrency),
+  );
+  const creditUsages = await Promise.all(
+    creditCardsForUtilization.map(async (a) => {
+      const c = a.creditLimitCurrency as FiatCurrency;
+      const used = await computeCreditUsedCents(
+        userId,
+        a.id,
+        a.creditOpeningBalanceCents,
+        c,
+      );
+      return { c, owed: Math.max(0, used) };
+    }),
+  );
+  for (const { c, owed } of creditUsages) {
+    byCurrency[c].creditCardOutstandingMinor += owed;
+    byCurrency[c].liabilitiesFromActivityMinor += owed;
+  }
+
   const recurringRows = await db.query.recurringExpenses.findMany({
     where: eq(recurringExpenses.userId, userId),
   });
@@ -183,9 +283,11 @@ export async function computeDashboardOverviewByCurrency(
 }
 
 /**
- * Assets / liabilities = per-account transaction nets (positive → assets, negative →
- * liabilities) plus outstanding lending: receivables add to assets, payables add to
- * liabilities. Not live bank balances. `lending*` fields are the lending-only portions.
+ * Assets / liabilities = cash-like nets (transactions + starting balances), **plus
+ * credit card balances owed** for cards with a limit (`computeCreditUsedCents`), then
+ * lending. Credit-with-limit accounts are skipped in the bucket loop so utilization
+ * is not double counted. `creditCardOutstandingMinor` is part of liabilities.
+ * `lending*` fields are the lending-only portions.
  */
 export async function getDashboardOverview(): Promise<{
   byCurrency: Record<FiatCurrency, CurrencyOverview>;

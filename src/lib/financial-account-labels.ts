@@ -4,6 +4,7 @@ export const FINANCE_ACCOUNT_TYPES = [
   "forex",
   "business",
   "cash",
+  "ewallet",
   "other",
 ] as const;
 
@@ -15,6 +16,7 @@ export const FINANCE_ACCOUNT_TYPE_ORDER: FinanceAccountKind[] = [
   "crypto",
   "forex",
   "cash",
+  "ewallet",
   "other",
 ];
 
@@ -24,5 +26,6 @@ export const FINANCE_ACCOUNT_LABELS: Record<FinanceAccountKind, string> = {
   forex: "Forex / trading",
   business: "Business",
   cash: "Cash",
+  ewallet: "E-wallet",
   other: "Other",
 };

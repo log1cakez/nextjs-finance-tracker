@@ -15,6 +15,7 @@ import { getDb } from "../src/db/index";
 import {
   accountTransfers,
   categories,
+  categoryDefinitions,
   financialAccounts,
   lendingPayments,
   lendings,
@@ -26,6 +27,7 @@ import {
   encryptFinanceObject,
   encryptFinancePlaintext,
 } from "../src/lib/finance-field-crypto";
+import { normalizeCategoryNameKey } from "../src/lib/category-name";
 import { encryptTransactionPayload } from "../src/lib/transaction-crypto";
 
 config({ path: ".env.local" });
@@ -149,17 +151,55 @@ async function main() {
     ])
     .returning({ id: financialAccounts.id });
 
-  const catRows = await db
-    .insert(categories)
-    .values([
-      { userId, name: `Salary ${SEED_TAG}`, kind: "income" },
-      { userId, name: `Freelance ${SEED_TAG}`, kind: "income" },
-      { userId, name: `Groceries ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Rent ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Utilities ${SEED_TAG}`, kind: "expense" },
-      { userId, name: `Dining ${SEED_TAG}`, kind: "expense" },
-    ])
-    .returning({ id: categories.id, kind: categories.kind });
+  const catSpecs = [
+    { name: `Salary ${SEED_TAG}`, kind: "income" as const },
+    { name: `Freelance ${SEED_TAG}`, kind: "income" as const },
+    { name: `Groceries ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Rent ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Utilities ${SEED_TAG}`, kind: "expense" as const },
+    { name: `Dining ${SEED_TAG}`, kind: "expense" as const },
+  ];
+  const catRows: { id: string; kind: "income" | "expense" }[] = [];
+  for (const spec of catSpecs) {
+    const nameKey = normalizeCategoryNameKey(spec.name);
+    let def = await db.query.categoryDefinitions.findFirst({
+      where: and(
+        eq(categoryDefinitions.nameKey, nameKey),
+        eq(categoryDefinitions.kind, spec.kind),
+      ),
+    });
+    if (!def) {
+      await db
+        .insert(categoryDefinitions)
+        .values({
+          name: spec.name,
+          nameKey,
+          kind: spec.kind,
+        })
+        .onConflictDoNothing({
+          target: [categoryDefinitions.nameKey, categoryDefinitions.kind],
+        });
+      def = await db.query.categoryDefinitions.findFirst({
+        where: and(
+          eq(categoryDefinitions.nameKey, nameKey),
+          eq(categoryDefinitions.kind, spec.kind),
+        ),
+      });
+    }
+    if (!def) {
+      throw new Error(`Failed to resolve category definition for ${spec.name}`);
+    }
+    const [row] = await db
+      .insert(categories)
+      .values({
+        userId,
+        definitionId: def.id,
+        name: def.name,
+        kind: spec.kind,
+      })
+      .returning({ id: categories.id, kind: categories.kind });
+    if (row) catRows.push(row);
+  }
 
   const byKind = (k: "income" | "expense") =>
     catRows.filter((c) => c.kind === k).map((c) => c.id);

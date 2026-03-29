@@ -78,6 +78,27 @@
       "when": 1774704000000,
       "tag": "0010_credit_paydown",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774705000000,
+      "tag": "0011_category_definitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774706000000,
+      "tag": "0012_financial_account_ewallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1774707000000,
+      "tag": "0013_financial_account_opening_balance",
+      "breakpoints": true
     }
   ]
 }

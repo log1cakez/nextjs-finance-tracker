@@ -9,6 +9,7 @@ import {
 import type { categories, financialAccounts } from "@/db/schema";
 import { SUPPORTED_CURRENCIES, type FiatCurrency } from "@/lib/money";
 import Link from "next/link";
+import { formatTypedLabel } from "@/lib/typed-label-format";
 
 type Category = typeof categories.$inferSelect;
 type FinAccount = typeof financialAccounts.$inferSelect;
@@ -75,6 +76,9 @@ export function TransactionForm({
             className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 shadow-sm outline-none ring-zinc-400 focus:border-zinc-400 focus:ring-2 sm:min-h-10 sm:py-2 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             placeholder="Coffee, paycheck…"
             autoComplete="off"
+            onBlur={(e) => {
+              e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+            }}
           />
         </label>
 

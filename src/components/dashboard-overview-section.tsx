@@ -21,10 +21,13 @@ export function DashboardOverviewSection({
           Position & projections ({preferredCurrency})
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Assets and liabilities include transaction activity per account and
-          outstanding lending (receivables in assets, payables in liabilities). Not
-          live bank balances. Projections use fixed-amount recurring templates only
-          (variable amounts are excluded).
+          Assets and liabilities include each account’s recorded transactions and
+          any starting balance you set when adding the account (same idea as the
+          Accounts page), credit card balances owed for cards with a limit
+          configured, and outstanding lending. Transfers are reflected in credit
+          utilization but not in the non-card bucket totals. Not live bank
+          balances. Projections use fixed-amount recurring templates only (variable
+          amounts are excluded).
         </p>
       </div>
 
@@ -36,7 +39,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Positive account nets + receivables"
+            hint="Positive nets + starting balances + receivables"
             variant="income"
           />
           <StatCard
@@ -63,7 +66,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Negative account nets + payables"
+            hint="Credit owed + other nets + payables"
             variant="expense"
           />
           <StatCard
@@ -84,6 +87,27 @@ export function DashboardOverviewSection({
           />
         </div>
       </div>
+
+      {overview.creditCardOutstandingMinor > 0 ? (
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <span className="font-medium text-zinc-600 dark:text-zinc-300">
+            Credit cards ({preferredCurrency})
+          </span>
+          :{" "}
+          {formatMoney(
+            overview.creditCardOutstandingMinor,
+            preferredCurrency,
+          )}{" "}
+          owed on cards with a credit limit set (same utilization as the Accounts
+          page) is included in liabilities above.{" "}
+          <Link
+            href="/accounts"
+            className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+          >
+            Manage accounts
+          </Link>
+        </p>
+      ) : null}
 
       {overview.lendingReceivablesOutstandingMinor > 0 ||
       overview.lendingPayablesOutstandingMinor > 0 ? (

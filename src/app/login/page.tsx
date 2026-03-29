@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AuthPageLogo } from "@/components/auth-page-logo";
-import { AuthPageQuote } from "@/components/auth-page-quote";
 import { LoginForm } from "@/components/login-form";
 import { APP_TAGLINE } from "@/lib/brand";
 
@@ -52,7 +51,6 @@ export default async function LoginPage({
           Register
         </Link>
       </p>
-      <AuthPageQuote />
     </div>
   );
 }
