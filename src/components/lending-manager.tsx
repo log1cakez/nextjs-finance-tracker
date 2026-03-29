@@ -61,41 +61,41 @@ function LendingPaymentForm({
     <form
       ref={ref}
       action={formAction}
-      className="flex flex-wrap items-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800"
+      className="flex flex-col gap-3 border-t border-zinc-200 pt-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-2 dark:border-zinc-800"
     >
       <input type="hidden" name="lendingId" value={lendingId} />
-      <label className="flex min-w-[6rem] flex-1 flex-col text-xs font-medium text-zinc-600 dark:text-zinc-400">
+      <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 sm:min-w-[6rem] sm:max-w-[10rem] sm:flex-1 dark:text-zinc-400">
         Amount
         <input
           name="amount"
           required
           inputMode="decimal"
           placeholder="0.00"
-          className="mt-1 min-h-9 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+          className="mt-1 min-h-11 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </label>
-      <label className="flex flex-col text-xs font-medium text-zinc-600 dark:text-zinc-400">
+      <label className="flex w-full flex-col text-xs font-medium text-zinc-600 sm:w-auto dark:text-zinc-400">
         Date
         <input
           name="paidAt"
           type="date"
           required
           defaultValue={defaultDate}
-          className="mt-1 min-h-9 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+          className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-auto sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </label>
-      <label className="flex min-w-[8rem] flex-1 flex-col text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:min-w-[10rem]">
+      <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 dark:text-zinc-400">
         Note (optional)
         <input
           name="note"
           maxLength={500}
-          className="mt-1 min-h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+          className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="min-h-9 rounded-lg bg-zinc-900 px-3 text-xs font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+        className="min-h-12 w-full touch-manipulation rounded-lg bg-zinc-900 px-3 text-sm font-medium text-white active:bg-zinc-800 disabled:opacity-60 sm:min-h-9 sm:w-auto sm:text-xs dark:bg-zinc-100 dark:text-zinc-900 dark:active:bg-white"
       >
         {pending ? "…" : "Record payment"}
       </button>
@@ -125,49 +125,49 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
       : "Lump sum";
 
   return (
-    <li className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="font-semibold text-zinc-900 dark:text-zinc-50">
+    <li className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-semibold text-zinc-900 dark:text-zinc-50">
             {lending.counterpartyName}
           </p>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
             {kindLabel} · {styleLabel}
           </p>
           {lending.notes ? (
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <p className="mt-2 break-words text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
               {lending.notes}
             </p>
           ) : null}
         </div>
-        <form action={deleteLending} className="shrink-0">
+        <form action={deleteLending} className="shrink-0 lg:self-start">
           <input type="hidden" name="id" value={lending.id} />
           <button
             type="submit"
-            className="text-xs font-medium text-zinc-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400"
+            className="min-h-10 w-full touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-rose-600 active:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-rose-400 dark:active:bg-zinc-800 sm:w-auto sm:text-xs"
           >
             Remove loan
           </button>
         </form>
       </div>
 
-      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 sm:gap-2">
         <div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Principal</p>
-          <p className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
+          <p className="break-words font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
             {formatMoney(lending.principalCents, c)}
           </p>
         </div>
         <div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Paid so far</p>
-          <p className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
+          <p className="break-words font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
             {formatMoney(paidCents, c)}
           </p>
         </div>
-        <div>
+        <div className="col-span-2 sm:col-span-1">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Remaining</p>
           <p
-            className={`font-semibold tabular-nums ${
+            className={`break-words font-semibold tabular-nums ${
               remainingCents <= 0
                 ? "text-emerald-600 dark:text-emerald-400"
                 : "text-zinc-900 dark:text-zinc-50"
@@ -178,7 +178,7 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
         </div>
       </div>
 
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800 sm:h-2">
         <div
           className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-500 transition-[width] dark:from-amber-500 dark:to-amber-400"
           style={{ width: `${pct}%` }}
@@ -201,7 +201,7 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
           {payments.map((p) => (
             <li
               key={p.id}
-              className="flex flex-wrap items-center justify-between gap-2 text-sm"
+              className="flex flex-col gap-2 rounded-lg bg-zinc-50/80 px-2 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:bg-transparent sm:px-0 sm:py-0 dark:bg-zinc-900/40 dark:sm:bg-transparent"
             >
               <div className="min-w-0">
                 <span className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
@@ -215,16 +215,16 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
                   })}
                 </span>
                 {p.note ? (
-                  <span className="mt-0.5 block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="mt-1 block break-words text-xs text-zinc-500 dark:text-zinc-400">
                     {p.note}
                   </span>
                 ) : null}
               </div>
-              <form action={deleteLendingPayment}>
+              <form action={deleteLendingPayment} className="shrink-0 self-end sm:self-auto">
                 <input type="hidden" name="id" value={p.id} />
                 <button
                   type="submit"
-                  className="text-xs text-zinc-500 hover:text-rose-600 dark:text-zinc-400"
+                  className="min-h-10 min-w-[2.75rem] touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-200 hover:text-rose-600 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400 sm:min-h-0 sm:text-xs"
                 >
                   Delete
                 </button>
@@ -270,51 +270,59 @@ export function LendingManager({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8 sm:space-y-10">
       <form
         ref={formRef}
         action={formAction}
-        className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50"
+        className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:p-6"
       >
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
           New loan / IOU
         </h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">
-            Receivable
-          </span>
-          : someone borrowed from you.
-          <span className="mx-1 font-medium text-zinc-700 dark:text-zinc-300">
-            Payable
-          </span>
-          : you borrowed from them. Record each repayment as a payment until the
-          balance reaches zero.
-        </p>
+        <div className="space-y-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <ul className="list-none space-y-1.5">
+            <li>
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                Receivable:
+              </span>{" "}
+              someone borrowed from you.
+            </li>
+            <li>
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                Payable:
+              </span>{" "}
+              you borrowed from them.
+            </li>
+          </ul>
+          <p>
+            Record each repayment as a payment until the balance reaches zero.
+          </p>
+        </div>
 
         <fieldset>
           <legend className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Type
           </legend>
-          <div className="mt-2 flex flex-wrap gap-4">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg py-1 text-sm text-zinc-700 sm:min-h-0 dark:text-zinc-300">
               <input
                 type="radio"
                 name="kind"
                 value="receivable"
                 checked={kind === "receivable"}
                 onChange={() => setKind("receivable")}
-                className="h-4 w-4 border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-600"
+                className="h-5 w-5 shrink-0 border-zinc-300 text-amber-600 focus:ring-amber-500 sm:h-4 sm:w-4 dark:border-zinc-600"
               />
               Receivable (owed to you)
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg py-1 text-sm text-zinc-700 sm:min-h-0 dark:text-zinc-300">
               <input
                 type="radio"
                 name="kind"
                 value="payable"
                 checked={kind === "payable"}
                 onChange={() => setKind("payable")}
-                className="h-4 w-4 border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-600"
+                className="h-5 w-5 shrink-0 border-zinc-300 text-amber-600 focus:ring-amber-500 sm:h-4 sm:w-4 dark:border-zinc-600"
               />
               Payable (you owe)
             </label>
@@ -328,7 +336,7 @@ export function LendingManager({
               name="counterpartyName"
               required
               maxLength={120}
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-0 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="e.g. Alex, Mom, Chase…"
             />
           </label>
@@ -339,7 +347,7 @@ export function LendingManager({
               name="amount"
               required
               inputMode="decimal"
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-0 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="0.00"
             />
           </label>
@@ -350,7 +358,7 @@ export function LendingManager({
               key={defaultCurrency}
               name="currency"
               defaultValue={defaultCurrency}
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             >
               {SUPPORTED_CURRENCIES.map((x) => (
                 <option key={x} value={x}>
@@ -365,7 +373,7 @@ export function LendingManager({
             <select
               name="repaymentStyle"
               defaultValue="lump_sum"
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             >
               <option value="lump_sum">Lump sum (one payment)</option>
               <option value="installment">Installment (multiple payments)</option>
@@ -379,7 +387,7 @@ export function LendingManager({
               type="date"
               required
               defaultValue={today}
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             />
           </label>
 
@@ -389,7 +397,7 @@ export function LendingManager({
               name="notes"
               rows={2}
               maxLength={2000}
-              className="mt-1.5 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1.5 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-0 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="Terms, reminders…"
             />
           </label>
@@ -407,14 +415,14 @@ export function LendingManager({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+          className="inline-flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 active:bg-zinc-950 disabled:opacity-60 sm:h-10 sm:min-h-0 sm:w-auto dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white dark:active:bg-zinc-200"
         >
           {pending ? "Saving…" : "Add loan"}
         </button>
       </form>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <h2 className="text-base font-semibold text-zinc-900 sm:text-lg dark:text-zinc-50">
           Receivables
         </h2>
         {receivables.length === 0 ? (
@@ -431,7 +439,7 @@ export function LendingManager({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <h2 className="text-base font-semibold text-zinc-900 sm:text-lg dark:text-zinc-50">
           Payables
         </h2>
         {payables.length === 0 ? (
