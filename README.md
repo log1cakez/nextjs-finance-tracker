@@ -107,7 +107,3 @@ Comments in `.env.example` describe Gmail SMTP, Resend, and optional overrides.
 - Set the same environment variables on your host (e.g. [Vercel](https://vercel.com/)) as in production `.env`.
 - Use a **pooled** Neon connection string for serverless.
 - Ensure `postinstall` runs so `patch-package` applies [patches/next-themes+0.4.6.patch](patches/next-themes+0.4.6.patch).
-
-## License
-
-Private project unless you add a license file.
