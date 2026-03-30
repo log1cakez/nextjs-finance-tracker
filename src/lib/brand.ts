@@ -2,10 +2,11 @@
 export const APP_NAME = "MIDAS Finance Tracker";
 
 /** `<title>` / browser tab — favicon carries the MIDAS mark. */
-export const APP_PAGE_TITLE = "Finance Tracker";
+export const APP_PAGE_TITLE = "MIDAS Finance Tracker";
 
-/** Header + auth screens; file lives in `/public` (no spaces — reliable caching). */
-export const BRAND_LOGO_PUBLIC_PATH = "/midas-logo.png";
+/** Header + auth screens; file lives in `/public`. */
+export const BRAND_LOGO_LIGHT_PUBLIC_PATH = "/midas logo.webp";
+export const BRAND_LOGO_DARK_PUBLIC_PATH = "/midas no bg.png";
 
 export const APP_TAGLINE =
   "Every insight touched with clarity — like Midas turning lead to gold.";

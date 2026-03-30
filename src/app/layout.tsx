@@ -21,6 +21,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: APP_PAGE_TITLE,
   description: APP_DESCRIPTION,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/midas%20no%20bg.png",
+    shortcut: "/midas%20no%20bg.png",
+    apple: "/midas%20no%20bg.png",
+  },
 };
 
 export const viewport: Viewport = {
