@@ -23,9 +23,9 @@ export const metadata: Metadata = {
   description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/midas%20no%20bg.png",
-    shortcut: "/midas%20no%20bg.png",
-    apple: "/midas%20no%20bg.png",
+    icon: "/midas-icon-512.webp",
+    shortcut: "/midas-icon-512.webp",
+    apple: "/midas-home.png",
   },
 };
 

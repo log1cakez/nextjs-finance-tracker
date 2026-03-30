@@ -11,14 +11,16 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#09090b",
     icons: [
       {
-        src: "/midas%20no%20bg.png",
+        src: "/midas-icon-192.webp",
         sizes: "192x192",
-        type: "image/png",
+        type: "image/webp",
+        purpose: "any",
       },
       {
-        src: "/midas%20no%20bg.png",
+        src: "/midas-icon-512.webp",
         sizes: "512x512",
-        type: "image/png",
+        type: "image/webp",
+        purpose: "maskable",
       },
     ],
   };

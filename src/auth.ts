@@ -67,6 +67,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
   ],
   callbacks: {
+    redirect({ url, baseUrl }) {
+      // Keep explicit login redirects (e.g. signOut, deleted-account flow).
+      if (url.startsWith("/login")) {
+        return `${baseUrl}${url}`;
+      }
+      if (url.startsWith(`${baseUrl}/login`)) {
+        return url;
+      }
+      // After sign-in, always land on dashboard.
+      return `${baseUrl}/`;
+    },
     authorized({ auth, request }) {
       const p = request.nextUrl.pathname;
       if (p.startsWith("/api/auth")) {
