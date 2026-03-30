@@ -23,9 +23,13 @@ export const metadata: Metadata = {
   description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/midas-icon-512.webp",
-    shortcut: "/midas-icon-512.webp",
-    apple: "/midas-home.png",
+    icon: [
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/midas-icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/midas-icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: "/favicon-32.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 
