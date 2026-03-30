@@ -4,9 +4,13 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import {
   createFinancialAccount,
   deleteFinancialAccount,
+  updateCreditAccountDetails,
+  updateFinancialAccountBasics,
   updateBankCreditSettings,
   type FinancialAccountActionState,
   type FinancialAccountWithUsage,
+  type UpdateAccountBasicsActionState,
+  type UpdateCreditAccountDetailsActionState,
   type UpdateCreditActionState,
 } from "@/app/actions/financial-accounts";
 import { AccountTransactionLogModal } from "@/components/recent-transactions-log-modal";
@@ -24,6 +28,8 @@ import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: FinancialAccountActionState = {};
 const creditUpdateInitial: UpdateCreditActionState = {};
+const accountBasicsInitial: UpdateAccountBasicsActionState = {};
+const creditAccountDetailsInitial: UpdateCreditAccountDetailsActionState = {};
 
 function centsToDecimalInput(cents: number): string {
   return (cents / 100).toFixed(2);
@@ -41,11 +47,9 @@ function ordinalDay(n: number): string {
 function BankActivityLine({
   netCents,
   currency,
-  foreignOpening,
 }: {
   netCents: number;
   currency: FiatCurrency;
-  foreignOpening?: { cents: number; currency: FiatCurrency };
 }) {
   return (
     <p className="mt-2 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
@@ -53,15 +57,8 @@ function BankActivityLine({
         Balance ({currency})
       </span>
       : {formatMoney(netCents, currency)} — starting balance you set (if any)
-      plus net from transactions, recurring logs, and transfers in this
-      currency (navbar preference).
-      {foreignOpening ? (
-        <span className="mt-1 block text-zinc-500 dark:text-zinc-400">
-          Starting balance also recorded as{" "}
-          {formatMoney(foreignOpening.cents, foreignOpening.currency)}. Switch
-          the currency in the navbar to include that amount in the total above.
-        </span>
-      ) : null}
+      plus net from transactions, recurring logs, and transfers. Amounts in the
+      other supported currency are converted to {currency} for this display.
     </p>
   );
 }
@@ -243,6 +240,172 @@ function BankCreditEditForm({
               </span>
             </label>
           </div>
+          {state.error ? (
+            <p className="text-xs text-rose-600 dark:text-rose-400">{state.error}</p>
+          ) : null}
+          {state.success ? (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Saved.</p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountBasicsEditForm({
+  account,
+  defaultCurrency,
+}: {
+  account: FinancialAccountWithUsage;
+  defaultCurrency: FiatCurrency;
+}) {
+  const [open, setOpen] = useState(false);
+  const isCreditCard = account.type === "bank" && account.bankKind === "credit";
+  const [state, formAction, pending] = useActionState(
+    isCreditCard ? updateCreditAccountDetails : updateFinancialAccountBasics,
+    isCreditCard ? creditAccountDetailsInitial : accountBasicsInitial,
+  );
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.success) {
+      setOpen(false);
+    }
+  }, [state.success]);
+
+  return (
+    <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs font-medium text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
+      >
+        {open ? "Cancel edit" : "Edit account"}
+      </button>
+      {open ? (
+        <form ref={formRef} action={formAction} className="mt-3 space-y-3">
+          <input type="hidden" name="id" value={account.id} />
+          <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Name
+            <input
+              name="name"
+              required
+              defaultValue={account.name}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              onBlur={(e) => {
+                e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+              }}
+            />
+          </label>
+          {!isCreditCard ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Starting balance (optional)
+                <input
+                  name="heldAmount"
+                  inputMode="decimal"
+                  defaultValue={
+                    account.openingBalanceCents != null
+                      ? centsToDecimalInput(account.openingBalanceCents)
+                      : ""
+                  }
+                  placeholder="0.00"
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                />
+              </label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Balance currency
+                <select
+                  name="heldCurrency"
+                  defaultValue={account.openingBalanceCurrency ?? defaultCurrency}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                >
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Credit limit
+                <input
+                  name="creditLimit"
+                  required
+                  inputMode="decimal"
+                  defaultValue={
+                    account.creditLimitCents != null
+                      ? centsToDecimalInput(account.creditLimitCents)
+                      : ""
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                />
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Starting balance owed (optional)
+                  <input
+                    name="creditOpening"
+                    inputMode="decimal"
+                    defaultValue={
+                      account.creditOpeningBalanceCents > 0
+                        ? centsToDecimalInput(account.creditOpeningBalanceCents)
+                        : ""
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Limit currency
+                  <select
+                    name="creditLimitCurrency"
+                    defaultValue={account.creditLimitCurrency ?? defaultCurrency}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Statement date
+                  <input
+                    name="creditStatementDay"
+                    type="number"
+                    min={1}
+                    max={31}
+                    defaultValue={account.creditStatementDayOfMonth ?? ""}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Payment due
+                  <input
+                    name="creditPaymentDueDay"
+                    type="number"
+                    min={1}
+                    max={31}
+                    defaultValue={account.creditPaymentDueDayOfMonth ?? ""}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  />
+                </label>
+              </div>
+            </>
+          )}
           {state.error ? (
             <p className="text-xs text-rose-600 dark:text-rose-400">{state.error}</p>
           ) : null}
@@ -530,7 +693,6 @@ export function AccountManager({
                           <BankActivityLine
                             netCents={a.activityNetCents}
                             currency={a.activityCurrency}
-                            foreignOpening={a.openingBalanceForeign}
                           />
                         ) : null}
                         {a.type === "bank" &&
@@ -542,7 +704,13 @@ export function AccountManager({
                             paymentDay={a.creditPaymentDueDayOfMonth}
                           />
                         ) : null}
-                        <BankCreditEditForm account={a} />
+                        <AccountBasicsEditForm
+                          account={a}
+                          defaultCurrency={defaultCurrency}
+                        />
+                        {!(
+                          a.type === "bank" && a.bankKind === "credit"
+                        ) ? <BankCreditEditForm account={a} /> : null}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
                         <AccountTransactionLogModal

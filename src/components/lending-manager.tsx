@@ -30,10 +30,12 @@ function LendingPaymentForm({
   lendingId,
   disabled,
   defaultDate,
+  accountsList,
 }: {
   lendingId: string;
   disabled: boolean;
   defaultDate: string;
+  accountsList: { id: string; name: string }[];
 }) {
   const [state, formAction, pending] = useActionState(
     addLendingPayment,
@@ -85,6 +87,21 @@ function LendingPaymentForm({
           className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-auto sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </label>
+      <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 sm:min-w-[10rem] sm:flex-1 dark:text-zinc-400">
+        Account (optional)
+        <select
+          name="financialAccountId"
+          defaultValue=""
+          className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+        >
+          <option value="">—</option>
+          {accountsList.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 dark:text-zinc-400">
         Note (optional)
         <input
@@ -113,7 +130,13 @@ function LendingPaymentForm({
   );
 }
 
-function LendingCard({ row }: { row: LendingWithPayments }) {
+function LendingCard({
+  row,
+  accountsList,
+}: {
+  row: LendingWithPayments;
+  accountsList: { id: string; name: string }[];
+}) {
   const { lending, payments, paidCents, remainingCents } = row;
   const c = lending.currency as FiatCurrency;
   const pct =
@@ -244,6 +267,7 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
           lendingId={lending.id}
           disabled={remainingCents <= 0}
           defaultDate={new Date().toISOString().slice(0, 10)}
+          accountsList={accountsList}
         />
       </div>
     </li>
@@ -253,9 +277,11 @@ function LendingCard({ row }: { row: LendingWithPayments }) {
 export function LendingManager({
   items,
   defaultCurrency,
+  accountsList,
 }: {
   items: LendingWithPayments[];
   defaultCurrency: FiatCurrency;
+  accountsList: { id: string; name: string }[];
 }) {
   const [state, formAction, pending] = useActionState(
     createLending,
@@ -443,7 +469,11 @@ export function LendingManager({
         ) : (
           <ul className="space-y-4">
             {receivables.map((row) => (
-              <LendingCard key={row.lending.id} row={row} />
+              <LendingCard
+                key={row.lending.id}
+                row={row}
+                accountsList={accountsList}
+              />
             ))}
           </ul>
         )}
@@ -460,7 +490,11 @@ export function LendingManager({
         ) : (
           <ul className="space-y-4">
             {payables.map((row) => (
-              <LendingCard key={row.lending.id} row={row} />
+              <LendingCard
+                key={row.lending.id}
+                row={row}
+                accountsList={accountsList}
+              />
             ))}
           </ul>
         )}

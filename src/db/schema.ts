@@ -188,6 +188,8 @@ export const financialAccounts = pgTable("financial_accounts", {
   type: financialAccountType("type").notNull(),
   /** Set when `type` is `bank`; null for other account types. */
   bankKind: bankAccountKind("bank_kind"),
+  /** Encrypted JSON for sensitive account financial fields. */
+  financePayload: text("finance_payload"),
   /** Credit limit (minor units); only when `bankKind` is `credit`. */
   creditLimitCents: integer("credit_limit_cents"),
   /** Currency for limit and utilization (transactions in other currencies are ignored). */
@@ -295,12 +297,25 @@ export const lendingPayments = pgTable("lending_payments", {
   lendingId: uuid("lending_id")
     .notNull()
     .references(() => lendings.id, { onDelete: "cascade" }),
+  /** Optional: which of your accounts this payment affected. */
+  financialAccountId: uuid("financial_account_id").references(
+    () => financialAccounts.id,
+    { onDelete: "set null" },
+  ),
   /** Encrypted JSON: amountCents, note. When set, legacy amount/note are null. */
   financePayload: text("finance_payload"),
   amountCents: integer("amount_cents"),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** App-level FX cache for balance conversion (USD -> PHP). */
+export const appFxRates = pgTable("app_fx_rates", {
+  id: text("id").primaryKey(), // use fixed key "usd_php"
+  usdToPhpRatePpm: integer("usd_to_php_rate_ppm").notNull(), // parts-per-million
+  source: text("source").notNull().default("manual"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const transactions = pgTable("transactions", {
@@ -465,6 +480,7 @@ export const schema = {
   accountTransfers,
   lendings,
   lendingPayments,
+  appFxRates,
   transactions,
   usersRelations,
   accountsRelations,

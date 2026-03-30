@@ -23,6 +23,7 @@ import {
 } from "@/lib/lending-crypto";
 import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import { computeCreditUsedCents } from "@/lib/credit-utilization";
+import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 export type CurrencyOverview = {
@@ -118,7 +119,8 @@ async function applyAccountOpeningBalancesToBuckets(
   const accounts = await db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
   });
-  for (const a of accounts) {
+  for (const raw of accounts) {
+    const a = normalizeFinancialAccountRow(userId, raw);
     if (a.type === "bank" && a.bankKind === "credit") {
       continue;
     }
@@ -166,9 +168,12 @@ export async function computeDashboardOverviewByCurrency(
   const netByBucket = await mergeTransactionBucketsWithAccountOpenings(userId);
 
   const db = getDb();
-  const finAccounts = await db.query.financialAccounts.findMany({
+  const finAccountsRaw = await db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
   });
+  const finAccounts = finAccountsRaw.map((a) =>
+    normalizeFinancialAccountRow(userId, a),
+  );
   const creditCardWithLimitIds = new Set(
     finAccounts
       .filter(

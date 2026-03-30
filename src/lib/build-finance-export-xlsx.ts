@@ -21,6 +21,7 @@ import {
 import { RECURRING_FREQUENCY_LABELS } from "@/lib/recurring-expense-labels";
 import type { RecurringFrequencyKind } from "@/lib/recurring-expense-labels";
 import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
+import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import {
   normalizeLendingPaymentRow,
   normalizeLendingRow,
@@ -491,10 +492,11 @@ async function dbQueryCategories(userId: string) {
 
 async function dbQueryAccounts(userId: string) {
   const db = getDb();
-  return db.query.financialAccounts.findMany({
+  const rows = await db.query.financialAccounts.findMany({
     where: eq(financialAccounts.userId, userId),
     orderBy: [asc(financialAccounts.type), asc(financialAccounts.createdAt)],
   });
+  return rows.map((r) => normalizeFinancialAccountRow(userId, r));
 }
 
 async function dbQueryTransfers(userId: string) {

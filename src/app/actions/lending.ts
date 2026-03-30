@@ -4,7 +4,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { lendingPayments, lendings } from "@/db/schema";
+import { financialAccounts, lendingPayments, lendings } from "@/db/schema";
 import { encryptFinanceObject } from "@/lib/finance-field-crypto";
 import {
   normalizeLendingPaymentRow,
@@ -184,6 +184,7 @@ const addPaymentSchema = z.object({
   lendingId: z.string().uuid(),
   amount: z.string().min(1, "Amount is required"),
   paidAt: z.string().min(1, "Date is required"),
+  financialAccountId: z.string().uuid().optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -202,6 +203,10 @@ export async function addLendingPayment(
     lendingId: formString(formData, "lendingId"),
     amount: formString(formData, "amount"),
     paidAt: formString(formData, "paidAt"),
+    financialAccountId: (() => {
+      const v = formString(formData, "financialAccountId")?.trim() ?? "";
+      return v.length > 0 ? v : undefined;
+    })(),
     note: formString(formData, "note"),
   });
 
@@ -234,6 +239,21 @@ export async function addLendingPayment(
 
   if (!loanRow) {
     return { error: "Loan not found" };
+  }
+
+  let financialAccountId: string | null = null;
+  if (parsed.data.financialAccountId) {
+    const acc = await db.query.financialAccounts.findFirst({
+      where: and(
+        eq(financialAccounts.id, parsed.data.financialAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+      columns: { id: true },
+    });
+    if (!acc) {
+      return { error: "Pick a valid account for this payment" };
+    }
+    financialAccountId = acc.id;
   }
 
   const { payments, ...lRaw } = loanRow;
@@ -272,6 +292,7 @@ export async function addLendingPayment(
 
   await db.insert(lendingPayments).values({
     lendingId: parsed.data.lendingId,
+    financialAccountId,
     financePayload,
     amountCents: null,
     note: null,

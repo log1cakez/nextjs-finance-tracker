@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:encrypt-transactions": "tsx scripts/backfill-transaction-payloads.ts",
+    "db:encrypt-accounts": "tsx scripts/backfill-financial-account-payloads.ts",
     "db:seed": "tsx scripts/seed-dummy-data.ts"
   },
   "dependencies": {

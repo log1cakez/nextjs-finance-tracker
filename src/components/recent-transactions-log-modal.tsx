@@ -8,10 +8,8 @@ import {
   type PointerEventHandler,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  getRecentTransactionsForAccount,
-  type TransactionWithCategory,
-} from "@/app/actions/transactions";
+// kept for backwards-compat (other imports may be added later)
+import { getRecentAccountActivity, type AccountActivityItem } from "@/app/actions/account-activity";
 import { formatMoney, type FiatCurrency } from "@/lib/money";
 import { Spinner } from "@/components/spinner";
 
@@ -26,7 +24,7 @@ export function AccountTransactionLogModal({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [mounted, setMounted] = useState(false);
-  const [items, setItems] = useState<TransactionWithCategory[] | null>(null);
+  const [items, setItems] = useState<AccountActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +36,7 @@ export function AccountTransactionLogModal({
     setError(null);
     setLoading(true);
     setItems(null);
-    void getRecentTransactionsForAccount(accountId, FETCH_LIMIT)
+    void getRecentAccountActivity(accountId, FETCH_LIMIT)
       .then((data) => {
         setItems(data);
       })
@@ -105,7 +103,7 @@ export function AccountTransactionLogModal({
                       {accountName}
                     </span>
                     <span className="mt-0.5 block text-xs font-normal text-zinc-500 dark:text-zinc-400">
-                      Recent transactions
+                      Recent activity
                     </span>
                   </h2>
                   <button
@@ -152,25 +150,27 @@ export function AccountTransactionLogModal({
                     </p>
                   ) : items && items.length === 0 ? (
                     <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                      No transactions for this account yet. Add one on the
-                      Transactions page.
+                      No activity for this account yet.
                     </p>
                   ) : items ? (
                     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                       {items.map((t) => {
-                        const isCardPaydown = t.reducesCreditBalance === true;
-                        const isIncome = t.kind === "income";
+                        const positive = t.sign === 1;
+                        const typeLabel =
+                          t.type === "transaction"
+                            ? "Tx"
+                            : t.type === "transfer"
+                              ? "Transfer"
+                              : "Lending";
                         return (
                           <li key={t.id} className="py-3 first:pt-1 sm:py-2.5">
                             <div className="flex items-start justify-between gap-3 sm:gap-2">
                               <div className="min-w-0 flex-1">
                                 <p className="break-words text-sm font-medium leading-snug text-zinc-900 sm:line-clamp-2 dark:text-zinc-100">
-                                  {t.description}
-                                  {isCardPaydown ? (
-                                    <span className="ml-1 text-xs font-normal text-violet-600 dark:text-violet-400">
-                                      (card payment)
-                                    </span>
-                                  ) : null}
+                                  {t.title}
+                                  <span className="ml-2 inline-flex shrink-0 items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                                    {typeLabel}
+                                  </span>
                                 </p>
                                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                                   {new Date(
@@ -180,17 +180,17 @@ export function AccountTransactionLogModal({
                                     day: "numeric",
                                     year: "numeric",
                                   })}
-                                  {t.category ? ` · ${t.category.name}` : ""}
+                                  {t.subtitle ? ` · ${t.subtitle}` : ""}
                                 </p>
                               </div>
                               <span
                                 className={
-                                  isCardPaydown || isIncome
+                                  positive
                                     ? "shrink-0 pt-0.5 text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
                                     : "shrink-0 pt-0.5 text-right text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400"
                                 }
                               >
-                                {isCardPaydown || isIncome ? "+" : "−"}
+                                {positive ? "+" : "−"}
                                 {formatMoney(
                                   t.amountCents,
                                   t.currency as FiatCurrency,

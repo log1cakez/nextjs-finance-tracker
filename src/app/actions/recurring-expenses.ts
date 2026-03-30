@@ -24,6 +24,7 @@ import {
   encryptFinanceObject,
   encryptFinancePlaintext,
 } from "@/lib/finance-field-crypto";
+import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import {
   RECURRING_FREQUENCIES,
@@ -205,14 +206,15 @@ export async function createRecurringExpense(
   if (!fin) {
     return { error: "Pick a valid account" };
   }
+  const finNorm = normalizeFinancialAccountRow(userId, fin);
 
   if (
-    fin.bankKind === "credit" &&
-    fin.creditLimitCurrency != null &&
-    parsed.data.currency !== fin.creditLimitCurrency
+    finNorm.bankKind === "credit" &&
+    finNorm.creditLimitCurrency != null &&
+    parsed.data.currency !== finNorm.creditLimitCurrency
   ) {
     return {
-      error: `For this credit card, use template currency ${fin.creditLimitCurrency} (same as the card’s limit) so recurring logs update utilization on Accounts.`,
+      error: `For this credit card, use template currency ${finNorm.creditLimitCurrency} (same as the card’s limit) so recurring logs update utilization on Accounts.`,
     };
   }
 
@@ -222,7 +224,7 @@ export async function createRecurringExpense(
     creditPaydownRaw === "true" ||
     creditPaydownRaw === "1";
   if (creditPaydown) {
-    if (parsed.data.kind !== "expense" || fin.bankKind !== "credit") {
+    if (parsed.data.kind !== "expense" || finNorm.bankKind !== "credit") {
       return {
         error:
           "“Card bill payment” only applies when the template is an expense on a credit card account.",
@@ -365,25 +367,23 @@ export async function logRecurringExpense(formData: FormData) {
       eq(financialAccounts.id, row.financialAccountId),
       eq(financialAccounts.userId, userId),
     ),
-    columns: {
-      id: true,
-      bankKind: true,
-      creditLimitCurrency: true,
-    },
   });
+  const finNorm = finAccount
+    ? normalizeFinancialAccountRow(userId, finAccount)
+    : null;
   const paydown =
     row.kind === "expense" &&
     row.creditPaydown === true &&
-    finAccount?.bankKind === "credit";
+    finNorm?.bankKind === "credit";
   if (
-    finAccount?.bankKind === "credit" &&
-    finAccount.creditLimitCurrency != null &&
-    row.currency !== finAccount.creditLimitCurrency
+    finNorm?.bankKind === "credit" &&
+    finNorm.creditLimitCurrency != null &&
+    row.currency !== finNorm.creditLimitCurrency
   ) {
     redirect(
       "/recurring?error=" +
         encodeURIComponent(
-          `This template is in ${row.currency} but the card’s limit is tracked in ${finAccount.creditLimitCurrency}. Edit the template currency or card settings so they match — then usage on Accounts will update correctly.`,
+          `This template is in ${row.currency} but the card’s limit is tracked in ${finNorm.creditLimitCurrency}. Edit the template currency or card settings so they match — then usage on Accounts will update correctly.`,
         ),
     );
   }
@@ -472,7 +472,7 @@ export async function getRecurringExpenses() {
     amountCents: resolveRecurringAmountCents(userId, r),
     financialAccount: r.financialAccount
       ? {
-          ...r.financialAccount,
+          ...normalizeFinancialAccountRow(userId, r.financialAccount),
           name: decryptFinancePlaintext(userId, r.financialAccount.name),
         }
       : null,

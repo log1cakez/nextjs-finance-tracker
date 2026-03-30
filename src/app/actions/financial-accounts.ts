@@ -16,6 +16,14 @@ import {
   decryptFinancePlaintext,
   encryptFinancePlaintext,
 } from "@/lib/finance-field-crypto";
+import {
+  encryptFinancialAccountPayload,
+  normalizeFinancialAccountRow,
+} from "@/lib/financial-account-crypto";
+import {
+  convertMinorUnitsWithRate,
+  getUsdToPhpRateFromDbOrEnv,
+} from "@/lib/fx-rates";
 import { FINANCE_ACCOUNT_TYPES } from "@/lib/financial-account-labels";
 import {
   parseAmountToMinor,
@@ -84,6 +92,8 @@ export type FinancialAccountActionState = {
 };
 
 export type UpdateCreditActionState = FinancialAccountActionState;
+export type UpdateAccountBasicsActionState = FinancialAccountActionState;
+export type UpdateCreditAccountDetailsActionState = FinancialAccountActionState;
 
 const createSchema = z
   .object({
@@ -286,11 +296,7 @@ export async function createFinancialAccount(
   }
 
   try {
-    await getDb().insert(financialAccounts).values({
-      userId,
-      name: encName,
-      type,
-      bankKind,
+    const financePayload = encryptFinancialAccountPayload(userId, {
       creditLimitCents,
       creditLimitCurrency,
       creditOpeningBalanceCents,
@@ -298,6 +304,20 @@ export async function createFinancialAccount(
       creditPaymentDueDayOfMonth,
       openingBalanceCents,
       openingBalanceCurrency,
+    });
+    await getDb().insert(financialAccounts).values({
+      userId,
+      name: encName,
+      type,
+      bankKind,
+      financePayload,
+      creditLimitCents: null,
+      creditLimitCurrency: null,
+      creditOpeningBalanceCents: 0,
+      creditStatementDayOfMonth: null,
+      creditPaymentDueDayOfMonth: null,
+      openingBalanceCents: null,
+      openingBalanceCurrency: null,
     });
   } catch (err: unknown) {
     if (isMissingEwalletEnumError(err)) {
@@ -385,6 +405,7 @@ export async function updateBankCreditSettings(
   if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
     return { error: "That account is not a credit bank account" };
   }
+  const accNorm = normalizeFinancialAccountRow(userId, acc);
 
   const lim = parseAmountToMinor(parsed.data.creditLimit.trim());
   if (lim === null || lim <= 0) {
@@ -419,11 +440,20 @@ export async function updateBankCreditSettings(
   await db
     .update(financialAccounts)
     .set({
-      creditLimitCents: lim,
-      creditLimitCurrency: parsed.data.creditLimitCurrency,
-      creditOpeningBalanceCents,
-      creditStatementDayOfMonth: st.value,
-      creditPaymentDueDayOfMonth: pd.value,
+      financePayload: encryptFinancialAccountPayload(userId, {
+        creditLimitCents: lim,
+        creditLimitCurrency: parsed.data.creditLimitCurrency,
+        creditOpeningBalanceCents,
+        creditStatementDayOfMonth: st.value,
+        creditPaymentDueDayOfMonth: pd.value,
+        openingBalanceCents: accNorm.openingBalanceCents,
+        openingBalanceCurrency: accNorm.openingBalanceCurrency,
+      }),
+      creditLimitCents: null,
+      creditLimitCurrency: null,
+      creditOpeningBalanceCents: 0,
+      creditStatementDayOfMonth: null,
+      creditPaymentDueDayOfMonth: null,
     })
     .where(
       and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
@@ -431,6 +461,268 @@ export async function updateBankCreditSettings(
 
   revalidatePath("/accounts");
   revalidatePath("/", "layout");
+  return { success: true };
+}
+
+const updateCreditAccountDetailsSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string().min(1, "Name is required").max(120),
+    creditLimit: z.string().min(1, "Credit limit is required"),
+    creditOpening: z.string().optional(),
+    creditLimitCurrency: z.enum(SUPPORTED_CURRENCIES),
+    creditStatementDay: z.string().optional(),
+    creditPaymentDueDay: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const st = parseOptionalDayOfMonth(
+      data.creditStatementDay,
+      "Statement date",
+    );
+    if (!st.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: st.message,
+        path: ["creditStatementDay"],
+      });
+    }
+    const pd = parseOptionalDayOfMonth(
+      data.creditPaymentDueDay,
+      "Payment due date",
+    );
+    if (!pd.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: pd.message,
+        path: ["creditPaymentDueDay"],
+      });
+    }
+  });
+
+export async function updateCreditAccountDetails(
+  _prev: UpdateCreditAccountDetailsActionState,
+  formData: FormData,
+): Promise<UpdateCreditAccountDetailsActionState> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { error: "Sign in required" };
+  }
+
+  const parsed = updateCreditAccountDetailsSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    creditLimit: formData.get("creditLimit"),
+    creditOpening: formData.get("creditOpening"),
+    creditLimitCurrency: formData.get("creditLimitCurrency"),
+    creditStatementDay: formData.get("creditStatementDay") ?? undefined,
+    creditPaymentDueDay: formData.get("creditPaymentDueDay") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Invalid input";
+    return { error: msg };
+  }
+
+  const db = getDb();
+  const acc = await db.query.financialAccounts.findFirst({
+    where: and(
+      eq(financialAccounts.id, parsed.data.id),
+      eq(financialAccounts.userId, userId),
+    ),
+  });
+
+  if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
+    return { error: "That account is not a credit bank account" };
+  }
+  const accNorm = normalizeFinancialAccountRow(userId, acc);
+
+  const name = formatTypedLabel(parsed.data.name.trim());
+  if (!name) {
+    return { error: "Name is required" };
+  }
+  let encName: string;
+  try {
+    encName = encryptFinancePlaintext(userId, name);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY to store account names encrypted.",
+      };
+    }
+    return { error: "Could not encrypt account name. Try again." };
+  }
+
+  const lim = parseAmountToMinor(parsed.data.creditLimit.trim());
+  if (lim === null || lim <= 0) {
+    return { error: "Enter a positive credit limit" };
+  }
+
+  let creditOpeningBalanceCents = 0;
+  const openRaw = parsed.data.creditOpening?.trim() ?? "";
+  if (openRaw.length > 0) {
+    const o = parseAmountToMinor(openRaw);
+    if (o === null) {
+      return { error: "Enter a valid starting balance owed (or leave blank for zero)" };
+    }
+    creditOpeningBalanceCents = o;
+  }
+
+  const st = parseOptionalDayOfMonth(
+    parsed.data.creditStatementDay,
+    "Statement date",
+  );
+  const pd = parseOptionalDayOfMonth(
+    parsed.data.creditPaymentDueDay,
+    "Payment due date",
+  );
+  if (!st.ok) return { error: st.message };
+  if (!pd.ok) return { error: pd.message };
+
+  await db
+    .update(financialAccounts)
+    .set({
+      name: encName,
+      financePayload: encryptFinancialAccountPayload(userId, {
+        creditLimitCents: lim,
+        creditLimitCurrency: parsed.data.creditLimitCurrency,
+        creditOpeningBalanceCents,
+        creditStatementDayOfMonth: st.value,
+        creditPaymentDueDayOfMonth: pd.value,
+        openingBalanceCents: accNorm.openingBalanceCents,
+        openingBalanceCurrency: accNorm.openingBalanceCurrency,
+      }),
+      creditLimitCents: null,
+      creditLimitCurrency: null,
+      creditOpeningBalanceCents: 0,
+      creditStatementDayOfMonth: null,
+      creditPaymentDueDayOfMonth: null,
+    })
+    .where(
+      and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
+    );
+
+  revalidatePath("/accounts");
+  revalidatePath("/", "layout");
+  revalidatePath("/transactions");
+  revalidatePath("/recurring");
+  revalidatePath("/transfers");
+  return { success: true };
+}
+
+const updateBasicsSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1, "Name is required").max(120),
+  heldAmount: z.string().optional(),
+  heldCurrency: z.enum(SUPPORTED_CURRENCIES).optional(),
+});
+
+export async function updateFinancialAccountBasics(
+  _prev: UpdateAccountBasicsActionState,
+  formData: FormData,
+): Promise<UpdateAccountBasicsActionState> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { error: "Sign in required" };
+  }
+
+  const parsed = updateBasicsSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    heldAmount: formData.get("heldAmount") ?? undefined,
+    heldCurrency: formData.get("heldCurrency") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const name = formatTypedLabel(parsed.data.name.trim());
+  if (!name) {
+    return { error: "Name is required" };
+  }
+
+  const db = getDb();
+  const acc = await db.query.financialAccounts.findFirst({
+    where: and(
+      eq(financialAccounts.id, parsed.data.id),
+      eq(financialAccounts.userId, userId),
+    ),
+  });
+  if (!acc) {
+    return { error: "Account not found" };
+  }
+  const accNorm = normalizeFinancialAccountRow(userId, acc);
+
+  let encName: string;
+  try {
+    encName = encryptFinancePlaintext(userId, name.trim());
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+      return {
+        error:
+          "Set TRANSACTIONS_ENCRYPTION_KEY to store account names encrypted.",
+      };
+    }
+    return { error: "Could not encrypt account name. Try again." };
+  }
+
+  const isCreditCard = acc.type === "bank" && acc.bankKind === "credit";
+  let openingBalanceCents: number | null = null;
+  let openingBalanceCurrency: FiatCurrency | null = null;
+  if (!isCreditCard) {
+    const heldRaw = parsed.data.heldAmount?.trim() ?? "";
+    const curRaw = parsed.data.heldCurrency;
+    if (heldRaw.length === 0) {
+      openingBalanceCents = null;
+      openingBalanceCurrency = null;
+    } else {
+      const h = parseAmountToMinor(heldRaw);
+      if (h === null || h < 0) {
+        return { error: "Enter a valid starting balance (zero or more)" };
+      }
+      if (!curRaw || !SUPPORTED_CURRENCIES.includes(curRaw)) {
+        return { error: "Pick a currency for the starting balance" };
+      }
+      openingBalanceCents = h;
+      openingBalanceCurrency = curRaw;
+    }
+  }
+
+  await db
+    .update(financialAccounts)
+    .set({
+      name: encName,
+      financePayload: encryptFinancialAccountPayload(userId, {
+        creditLimitCents: accNorm.creditLimitCents,
+        creditLimitCurrency: accNorm.creditLimitCurrency,
+        creditOpeningBalanceCents: accNorm.creditOpeningBalanceCents,
+        creditStatementDayOfMonth: accNorm.creditStatementDayOfMonth,
+        creditPaymentDueDayOfMonth: accNorm.creditPaymentDueDayOfMonth,
+        openingBalanceCents: isCreditCard
+          ? accNorm.openingBalanceCents
+          : openingBalanceCents,
+        openingBalanceCurrency: isCreditCard
+          ? accNorm.openingBalanceCurrency
+          : openingBalanceCurrency,
+      }),
+      ...(isCreditCard
+        ? {}
+        : {
+            openingBalanceCents: null,
+            openingBalanceCurrency: null,
+          }),
+    })
+    .where(
+      and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
+    );
+
+  revalidatePath("/accounts");
+  revalidatePath("/", "layout");
+  revalidatePath("/transactions");
+  revalidatePath("/recurring");
+  revalidatePath("/transfers");
   return { success: true };
 }
 
@@ -492,7 +784,7 @@ export async function getFinancialAccounts() {
   });
   return rows
     .map((r) => ({
-      ...r,
+      ...normalizeFinancialAccountRow(userId, r),
       name: decryptFinancePlaintext(userId, r.name),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -502,11 +794,9 @@ export type FinancialAccountWithUsage = Awaited<
   ReturnType<typeof getFinancialAccounts>
 >[number] & {
   usedCreditCents?: number;
-  /** Starting balance + net activity (same currency as `activityCurrency`) for non–credit-card accounts. */
+  /** Starting balance + net activity, converted into `activityCurrency`. */
   activityNetCents?: number;
   activityCurrency?: FiatCurrency;
-  /** Starting balance stored in a currency other than the navbar (display) currency. */
-  openingBalanceForeign?: { cents: number; currency: FiatCurrency };
 };
 
 export async function getFinancialAccountsWithUsage(): Promise<
@@ -520,6 +810,7 @@ export async function getFinancialAccountsWithUsage(): Promise<
     getFinancialAccounts(),
     getPreferredCurrency(),
   ]);
+  const usdToPhp = await getUsdToPhpRateFromDbOrEnv();
   const out: FinancialAccountWithUsage[] = await Promise.all(
     accounts.map(async (a) => {
       const base: FinancialAccountWithUsage = { ...a };
@@ -545,31 +836,36 @@ export async function getFinancialAccountsWithUsage(): Promise<
         a.id,
         displayCurrency,
       );
+      const otherCurrency: FiatCurrency =
+        displayCurrency === "USD" ? "PHP" : "USD";
+      const otherActivityNetCents = await computeAccountNetActivityCents(
+        userId,
+        a.id,
+        otherCurrency,
+      );
+      const convertedOtherActivity = convertMinorUnitsWithRate(
+        otherActivityNetCents,
+        otherCurrency,
+        displayCurrency,
+        usdToPhp,
+      );
 
       let openingContrib = 0;
-      if (
-        !isCreditCard &&
-        a.openingBalanceCents != null &&
-        a.openingBalanceCurrency != null &&
-        a.openingBalanceCurrency === displayCurrency
-      ) {
-        openingContrib = a.openingBalanceCents;
+      if (!isCreditCard && a.openingBalanceCents != null && a.openingBalanceCurrency != null) {
+        openingContrib =
+          a.openingBalanceCurrency === displayCurrency
+            ? a.openingBalanceCents
+            : convertMinorUnitsWithRate(
+                a.openingBalanceCents,
+                a.openingBalanceCurrency as FiatCurrency,
+                displayCurrency,
+                usdToPhp,
+              );
       }
 
-      base.activityNetCents = activityNetCents + openingContrib;
+      base.activityNetCents =
+        activityNetCents + convertedOtherActivity + openingContrib;
       base.activityCurrency = displayCurrency;
-
-      if (
-        !isCreditCard &&
-        a.openingBalanceCents != null &&
-        a.openingBalanceCurrency != null &&
-        a.openingBalanceCurrency !== displayCurrency
-      ) {
-        base.openingBalanceForeign = {
-          cents: a.openingBalanceCents,
-          currency: a.openingBalanceCurrency as FiatCurrency,
-        };
-      }
 
       return base;
     }),

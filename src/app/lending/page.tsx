@@ -1,11 +1,13 @@
 import { getLendingsWithPayments } from "@/app/actions/lending";
 import { LendingManager } from "@/components/lending-manager";
+import { getFinancialAccounts } from "@/app/actions/financial-accounts";
 import { getPreferredCurrency } from "@/lib/preferences";
 
 export default async function LendingPage() {
-  const [items, preferredCurrency] = await Promise.all([
+  const [items, preferredCurrency, accounts] = await Promise.all([
     getLendingsWithPayments(),
     getPreferredCurrency(),
+    getFinancialAccounts(),
   ]);
 
   return (
@@ -23,6 +25,7 @@ export default async function LendingPage() {
       <LendingManager
         items={items}
         defaultCurrency={preferredCurrency}
+        accountsList={accounts}
       />
     </div>
   );
