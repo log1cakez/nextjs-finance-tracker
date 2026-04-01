@@ -24,10 +24,13 @@ export function DashboardOverviewSection({
           Assets and liabilities include each account’s recorded transactions and
           any starting balance you set when adding the account (same idea as the
           Accounts page), credit card balances owed for cards with a limit
-          configured, and outstanding lending. Transfers are reflected in credit
-          utilization but not in the non-card bucket totals. Not live bank
-          balances. Projections use fixed-amount recurring templates only (variable
-          amounts are excluded).
+          configured, and outstanding lending. Transfers between accounts are
+          reflected in account nets (and in card utilization for credit cards
+          with limits). Not live bank balances. Projections include fixed-amount recurring templates plus
+          lending outstanding (receivables as projected income, payables as
+          projected expense) and credit card balances owed. Projected expenses
+          are split as Scheduled + Existing obligations. Variable recurring
+          amounts are excluded.
         </p>
       </div>
 
@@ -75,6 +78,13 @@ export function DashboardOverviewSection({
               overview.projectedExpenseMinor,
               preferredCurrency,
             )}
+            hint={`Scheduled ${formatMoney(
+              overview.projectedExpenseScheduledMinor,
+              preferredCurrency,
+            )} + Existing obligations ${formatMoney(
+              overview.projectedExpenseExistingObligationsMinor,
+              preferredCurrency,
+            )}`}
             variant="expense"
           />
           <StatCard

@@ -87,7 +87,6 @@ export function totalsByCurrency(
       PHP: { income: 0, expense: 0 },
     };
   for (const t of txs) {
-    if (t.kind === "expense" && t.reducesCreditBalance) continue;
     const c = t.currency;
     if (t.kind === "income") {
       out[c].income += t.amountCents;

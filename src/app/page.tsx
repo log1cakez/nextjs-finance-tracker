@@ -26,6 +26,8 @@ const emptyOverview: CurrencyOverview = {
   lendingReceivablesOutstandingMinor: 0,
   lendingPayablesOutstandingMinor: 0,
   projectedIncomeMinor: 0,
+  projectedExpenseScheduledMinor: 0,
+  projectedExpenseExistingObligationsMinor: 0,
   projectedExpenseMinor: 0,
   projectedIncomeYearlyMinor: 0,
   projectedExpenseYearlyMinor: 0,

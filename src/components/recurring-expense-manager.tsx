@@ -32,6 +32,7 @@ import {
   weekdayLabel,
   type RecurringFrequencyKind,
 } from "@/lib/recurring-expense-labels";
+import { nextRecurringDueDate } from "@/lib/upcoming-due-dates";
 
 type Category = typeof categories.$inferSelect;
 type FinAccount = typeof financialAccounts.$inferSelect;
@@ -52,6 +53,7 @@ type RecurringRow = {
   category: (typeof categories.$inferSelect) | null;
   financialAccount: (typeof financialAccounts.$inferSelect) | null;
   creditPaydown?: boolean;
+  createdAt: Date | string;
 };
 
 function logsAmountEachTime(row: RecurringRow): boolean {
@@ -81,12 +83,35 @@ function scheduleSummary(row: RecurringRow): string {
   return f;
 }
 
+function dateInputValue(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function recurringLogDefaultDate(row: RecurringRow, now: Date): string {
+  const createdAt =
+    row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt);
+  const nextDue =
+    Number.isNaN(createdAt.getTime())
+      ? null
+      : nextRecurringDueDate(
+          {
+            frequency: row.frequency,
+            dueDayOfMonth: row.dueDayOfMonth,
+            secondDueDayOfMonth: row.secondDueDayOfMonth,
+            dueWeekday: row.dueWeekday,
+            createdAt,
+          },
+          now,
+        );
+  return dateInputValue(nextDue ?? now);
+}
+
 function FrequencyGroups({
   items,
-  today,
+  now,
 }: {
   items: RecurringRow[];
-  today: string;
+  now: Date;
 }) {
   const byFrequency = RECURRING_FREQUENCIES.map((freq) => ({
     freq,
@@ -196,7 +221,7 @@ function FrequencyGroups({
                           <input
                             type="date"
                             name="occurredAt"
-                            defaultValue={today}
+                            defaultValue={recurringLogDefaultDate(row, now)}
                             className="min-h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-auto sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
                           />
                           <button
@@ -256,6 +281,7 @@ export function RecurringExpenseManager({
   const [recKind, setRecKind] = useState<RecurringKind>("expense");
   const [variableAmount, setVariableAmount] = useState(false);
   const [templateAccountId, setTemplateAccountId] = useState<string>("");
+  const [dueDayOfMonthInput, setDueDayOfMonthInput] = useState<string>("");
   const templateAccount = useMemo(
     () => accountsList.find((a) => a.id === templateAccountId),
     [accountsList, templateAccountId],
@@ -271,6 +297,7 @@ export function RecurringExpenseManager({
       setRecKind("expense");
       setVariableAmount(false);
       setTemplateAccountId("");
+      setDueDayOfMonthInput("");
     });
   }, [state.success]);
 
@@ -287,7 +314,14 @@ export function RecurringExpenseManager({
     frequency !== "" &&
     isSemimonthlyFrequency(frequency as RecurringFrequencyKind);
 
-  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    if (!showDayOfMonth) return;
+    const accountDue = templateAccount?.creditPaymentDueDayOfMonth;
+    if (accountDue == null) return;
+    setDueDayOfMonthInput(String(accountDue));
+  }, [showDayOfMonth, templateAccount?.id, templateAccount?.creditPaymentDueDayOfMonth]);
+
+  const now = new Date();
 
   const expenseItems = items.filter((r) => r.kind === "expense");
   const incomeItems = items.filter((r) => r.kind === "income");
@@ -562,6 +596,8 @@ export function RecurringExpenseManager({
                 min={1}
                 max={31}
                 required
+                value={dueDayOfMonthInput}
+                onChange={(e) => setDueDayOfMonthInput(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
                 placeholder={
                   frequency === "quarterly" ? "e.g. 15" : "e.g. 1"
@@ -593,14 +629,14 @@ export function RecurringExpenseManager({
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Recurring expenses
         </h2>
-        <FrequencyGroups items={expenseItems} today={today} />
+        <FrequencyGroups items={expenseItems} now={now} />
       </section>
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Recurring income
         </h2>
-        <FrequencyGroups items={incomeItems} today={today} />
+        <FrequencyGroups items={incomeItems} now={now} />
       </section>
     </div>
   );

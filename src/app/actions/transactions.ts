@@ -353,7 +353,6 @@ export async function computeMonthlyCashflowTrend(
     const key = `${od.getFullYear()}-${String(od.getMonth() + 1).padStart(2, "0")}`;
     const b = buckets.get(key);
     if (!b) continue;
-    if (row.reducesCreditBalance) continue;
     if (tx.kind === "income") {
       b.incomeMinor += tx.amountCents;
     } else {

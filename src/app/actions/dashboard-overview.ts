@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  accountTransfers,
   financialAccounts,
   lendings,
   recurringExpenses,
@@ -25,6 +26,7 @@ import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import { computeCreditUsedCents } from "@/lib/credit-utilization";
 import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 
 export type CurrencyOverview = {
   assetsFromActivityMinor: number;
@@ -36,6 +38,10 @@ export type CurrencyOverview = {
   /** Outstanding principal you still owe (payables), after recorded payments. */
   lendingPayablesOutstandingMinor: number;
   projectedIncomeMinor: number;
+  /** Recurring templates + lending payables (projection-only outgoing). */
+  projectedExpenseScheduledMinor: number;
+  /** Existing outgoing obligations already owed (currently credit cards). */
+  projectedExpenseExistingObligationsMinor: number;
   projectedExpenseMinor: number;
   projectedIncomeYearlyMinor: number;
   projectedExpenseYearlyMinor: number;
@@ -49,6 +55,8 @@ function emptyOverview(): CurrencyOverview {
     lendingReceivablesOutstandingMinor: 0,
     lendingPayablesOutstandingMinor: 0,
     projectedIncomeMinor: 0,
+    projectedExpenseScheduledMinor: 0,
+    projectedExpenseExistingObligationsMinor: 0,
     projectedExpenseMinor: 0,
     projectedIncomeYearlyMinor: 0,
     projectedExpenseYearlyMinor: 0,
@@ -65,7 +73,8 @@ export type TransactionActivityBucket = {
 };
 
 /**
- * Per account+currency income/expense from transactions (before starting balances).
+ * Per account+currency income/expense from transactions + transfers
+ * (before starting balances).
  */
 export async function computeTransactionBuckets(
   userId: string,
@@ -79,7 +88,6 @@ export async function computeTransactionBuckets(
   const netByBucket = new Map<string, TransactionActivityBucket>();
 
   for (const row of txRows) {
-    if (row.reducesCreditBalance) continue;
     const tx = toDecryptedTransaction(userId, row);
     const c = tx.currency as FiatCurrency;
     if (!SUPPORTED_CURRENCIES.includes(c)) {
@@ -105,6 +113,54 @@ export async function computeTransactionBuckets(
       b.income += tx.amountCents;
     } else {
       b.expense += tx.amountCents;
+    }
+  }
+
+  const transferRows = await db.query.accountTransfers.findMany({
+    where: eq(accountTransfers.userId, userId),
+    with: { fromAccount: true, toAccount: true },
+  });
+  for (const row of transferRows) {
+    const c = row.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    const amt = transferAmountCentsFromRow(userId, row);
+
+    if (row.fromFinancialAccountId) {
+      const k = `${row.fromFinancialAccountId}|${c}`;
+      let b = netByBucket.get(k);
+      if (!b) {
+        b = {
+          income: 0,
+          expense: 0,
+          openingMinor: 0,
+          accountName: row.fromAccount
+            ? decryptFinancePlaintext(userId, row.fromAccount.name)
+            : "(Unknown)",
+          currency: c,
+        };
+        netByBucket.set(k, b);
+      }
+      // Transfer out lowers account balance.
+      b.expense += amt;
+    }
+
+    if (row.toFinancialAccountId) {
+      const k = `${row.toFinancialAccountId}|${c}`;
+      let b = netByBucket.get(k);
+      if (!b) {
+        b = {
+          income: 0,
+          expense: 0,
+          openingMinor: 0,
+          accountName: row.toAccount
+            ? decryptFinancePlaintext(userId, row.toAccount.name)
+            : "(Unknown)",
+          currency: c,
+        };
+        netByBucket.set(k, b);
+      }
+      // Transfer in raises account balance.
+      b.income += amt;
     }
   }
 
@@ -222,6 +278,10 @@ export async function computeDashboardOverviewByCurrency(
   for (const { c, owed } of creditUsages) {
     byCurrency[c].creditCardOutstandingMinor += owed;
     byCurrency[c].liabilitiesFromActivityMinor += owed;
+    byCurrency[c].projectedExpenseExistingObligationsMinor += owed;
+    // Include card balances owed in projected outflow.
+    byCurrency[c].projectedExpenseMinor += owed;
+    byCurrency[c].projectedExpenseYearlyMinor += owed;
   }
 
   const recurringRows = await db.query.recurringExpenses.findMany({
@@ -249,6 +309,7 @@ export async function computeDashboardOverviewByCurrency(
       byCurrency[c].projectedIncomeMinor += monthly;
       byCurrency[c].projectedIncomeYearlyMinor += yearly;
     } else {
+      byCurrency[c].projectedExpenseScheduledMinor += monthly;
       byCurrency[c].projectedExpenseMinor += monthly;
       byCurrency[c].projectedExpenseYearlyMinor += yearly;
     }
@@ -272,8 +333,15 @@ export async function computeDashboardOverviewByCurrency(
     const remainingCents = Math.max(0, L.principalCents - paidCents);
     if (L.kind === "receivable") {
       byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
+      // Also treat outstanding receivables as projected inflow.
+      byCurrency[c].projectedIncomeMinor += remainingCents;
+      byCurrency[c].projectedIncomeYearlyMinor += remainingCents;
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;
+      // Also treat outstanding payables as projected outflow.
+      byCurrency[c].projectedExpenseScheduledMinor += remainingCents;
+      byCurrency[c].projectedExpenseMinor += remainingCents;
+      byCurrency[c].projectedExpenseYearlyMinor += remainingCents;
     }
   }
 
@@ -290,8 +358,10 @@ export async function computeDashboardOverviewByCurrency(
 /**
  * Assets / liabilities = cash-like nets (transactions + starting balances), **plus
  * credit card balances owed** for cards with a limit (`computeCreditUsedCents`), then
- * lending. Credit-with-limit accounts are skipped in the bucket loop so utilization
- * is not double counted. `creditCardOutstandingMinor` is part of liabilities.
+ * lending. Transfers are included in bucket nets for non-credit-limit accounts.
+ * Credit-with-limit accounts are skipped in the bucket loop so utilization
+ * (which already includes transfers) is not double counted.
+ * `creditCardOutstandingMinor` is part of liabilities.
  * `lending*` fields are the lending-only portions.
  */
 export async function getDashboardOverview(): Promise<{
