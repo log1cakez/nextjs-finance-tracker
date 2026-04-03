@@ -121,7 +121,7 @@ export async function buildFinanceExportXlsxBuffer(
 
   const dashboardRows: Record<string, string | number>[] = [
     {
-      Metric: "MIDAS Finance Tracker — dashboard calculations",
+      Metric: "MIDAS Capital — dashboard calculations",
       USD: "",
       PHP: "",
       Notes: "",
