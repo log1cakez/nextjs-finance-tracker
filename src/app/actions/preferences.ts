@@ -16,5 +16,6 @@ export async function setPreferredCurrency(currency: string) {
     sameSite: "lax",
     httpOnly: true,
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/apps", "layout");
 }

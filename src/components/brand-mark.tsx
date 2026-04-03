@@ -27,7 +27,7 @@ export function BrandMark() {
         unoptimized
       />
       <span className="text-xl font-semibold tracking-tight text-zinc-800 sm:text-2xl dark:text-zinc-100">
-        MIDAS Finance Tracker
+        MIDAS Capital
       </span>
     </span>
   );

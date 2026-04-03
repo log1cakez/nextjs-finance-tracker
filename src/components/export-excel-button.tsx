@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useCenterToast } from "@/components/center-toast";
 import { Spinner } from "@/components/spinner";
 
@@ -22,20 +23,53 @@ function parseContentDispositionFilename(cd: string | null): string | null {
 
 type Variant = "menu" | "inline";
 
+export type ExcelExportTarget = "auto" | "finance" | "eod";
+
 export function ExportExcelButton({
   variant = "inline",
   className = "",
+  label = "Export Excel (.xlsx)",
+  /** `auto`: EOD routes → EOD workbook; otherwise Finance workbook. */
+  target = "auto",
 }: {
   variant?: Variant;
   className?: string;
+  label?: string;
+  target?: ExcelExportTarget;
 }) {
+  const pathname = usePathname();
+  const resolved = useMemo(() => {
+    if (target === "eod") {
+      return {
+        url: "/api/eod/export/excel",
+        fallbackFilename: "MIDAS_EODTracker_export.xlsx",
+      };
+    }
+    if (target === "finance") {
+      return {
+        url: "/api/export/excel",
+        fallbackFilename: "MIDAS_FinanceTracker_export.xlsx",
+      };
+    }
+    const isEod = pathname?.startsWith("/eod-tracker") ?? false;
+    return isEod
+      ? {
+          url: "/api/eod/export/excel",
+          fallbackFilename: "MIDAS_EODTracker_export.xlsx",
+        }
+      : {
+          url: "/api/export/excel",
+          fallbackFilename: "MIDAS_FinanceTracker_export.xlsx",
+        };
+  }, [pathname, target]);
+
   const [busy, setBusy] = useState(false);
   const { showToast } = useCenterToast();
 
   async function onExport() {
     setBusy(true);
     try {
-      const res = await fetch("/api/export/excel", {
+      const res = await fetch(resolved.url, {
         credentials: "same-origin",
       });
       if (res.status === 401) {
@@ -58,7 +92,8 @@ export function ExportExcelButton({
       }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition");
-      const filename = parseContentDispositionFilename(cd) ?? "MIDAS_FinanceTracker_export.xlsx";
+      const filename =
+        parseContentDispositionFilename(cd) ?? resolved.fallbackFilename;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -104,7 +139,7 @@ export function ExportExcelButton({
             Preparing…
           </>
         ) : (
-          "Export Excel (.xlsx)"
+          label
         )}
       </button>
     </span>

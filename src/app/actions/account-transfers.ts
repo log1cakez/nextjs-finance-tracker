@@ -136,9 +136,9 @@ export async function createAccountTransfer(
     occurredAt,
   });
 
-  revalidatePath("/transfers");
-  revalidatePath("/transactions");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/transfers");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/accounts");
   return { success: true };
 }
 
@@ -158,9 +158,9 @@ export async function deleteAccountTransfer(formData: FormData) {
       and(eq(accountTransfers.id, id), eq(accountTransfers.userId, userId)),
     );
 
-  revalidatePath("/transfers");
-  revalidatePath("/transactions");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/transfers");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/accounts");
 }
 
 export type TransferListItem = {

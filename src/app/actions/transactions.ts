@@ -187,10 +187,10 @@ export async function createTransaction(
     occurredAt,
   });
 
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/accounts");
-  revalidatePath("/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker/recurring");
   return { success: true };
 }
 
@@ -206,10 +206,10 @@ export async function deleteTransaction(formData: FormData) {
   await getDb()
     .delete(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/accounts");
-  revalidatePath("/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker/recurring");
 }
 
 export async function computeTransactionsForMonthRange(

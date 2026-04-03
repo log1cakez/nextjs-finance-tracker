@@ -72,7 +72,7 @@ export async function createCalendarFeedToken(
     };
   }
 
-  revalidatePath("/account");
+  revalidatePath("/financetracker/account");
   return { success: true, newToken: secret };
 }
 
@@ -90,6 +90,6 @@ export async function revokeCalendarFeedToken(
     .set({ calendarFeedTokenHash: null })
     .where(eq(users.id, userId));
 
-  revalidatePath("/account");
+  revalidatePath("/financetracker/account");
   return { success: true };
 }

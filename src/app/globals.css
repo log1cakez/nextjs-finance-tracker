@@ -49,3 +49,22 @@ body {
     transparent 50%
   );
 }
+
+/* EOD modal: center date text (native `type="date"` ignores `text-align` alone in WebKit/Blink) */
+.eod-modal-date {
+  text-align: center;
+}
+.eod-modal-date::-webkit-datetime-edit {
+  width: 100%;
+  text-align: center;
+  padding: 0;
+}
+.eod-modal-date::-webkit-datetime-edit-fields-wrapper {
+  display: inline-flex;
+  justify-content: center;
+}
+.eod-modal-date::-webkit-calendar-picker-indicator {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+}
+

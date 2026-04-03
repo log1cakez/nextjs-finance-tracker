@@ -9,7 +9,7 @@ import { REGISTER_INTRO } from "@/lib/brand";
 export default async function RegisterPage() {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/apps");
   }
 
   return (

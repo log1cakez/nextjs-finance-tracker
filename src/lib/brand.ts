@@ -1,8 +1,8 @@
 /** Product name and story — King Midas: the golden touch. */
-export const APP_NAME = "MIDAS Finance Tracker";
+export const APP_NAME = "MIDAS Capital";
 
 /** `<title>` / browser tab — favicon carries the MIDAS mark. */
-export const APP_PAGE_TITLE = "MIDAS Finance Tracker";
+export const APP_PAGE_TITLE = "MIDAS Capital";
 
 /** Header + auth screens; file lives in `/public`. */
 export const BRAND_LOGO_LIGHT_PUBLIC_PATH = "/midas logo.webp";

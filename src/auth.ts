@@ -75,8 +75,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (url.startsWith(`${baseUrl}/login`)) {
         return url;
       }
-      // After sign-in, always land on dashboard.
-      return `${baseUrl}/`;
+      // After sign-in, always land on the app picker.
+      return `${baseUrl}/apps`;
     },
     authorized({ auth, request }) {
       const p = request.nextUrl.pathname;
@@ -93,7 +93,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           p === "/forgot-password" ||
           p === "/reset-password")
       ) {
-        return NextResponse.redirect(new URL("/", request.nextUrl));
+        return NextResponse.redirect(new URL("/apps", request.nextUrl));
       }
       if (
         p === "/login" ||

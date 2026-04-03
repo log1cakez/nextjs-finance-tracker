@@ -10,7 +10,7 @@ export default async function ResetPasswordPage({
 }) {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/apps");
   }
 
   const { email } = await searchParams;

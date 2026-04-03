@@ -65,7 +65,7 @@ export default async function AccountPage() {
 
       <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
         <Link
-          href="/"
+          href="/financetracker"
           className="font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
         >
           Back to dashboard
