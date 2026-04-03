@@ -531,7 +531,7 @@ export function RecurringExpenseManager({
               <p className="mt-1.5 text-sm font-normal text-zinc-500 dark:text-zinc-400">
                 Add an account on the{" "}
                 <Link
-                  href="/accounts"
+                  href="/financetracker/accounts"
                   className="font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-200"
                 >
                   Accounts

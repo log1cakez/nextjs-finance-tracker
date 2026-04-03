@@ -1,16 +1,21 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { APP_AUTHOR_NAME, APP_FOOTER_DISCLAIMER } from "@/lib/brand";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
+  const pathname = usePathname();
+  const wideContent = pathname?.startsWith("/eod-tracker") ?? false;
 
   return (
     <footer
       className="mt-auto pt-8"
       role="contentinfo"
     >
-      <div className="mx-auto max-w-5xl px-3 pb-2 text-center sm:px-6">
+      <div
+        className={`mx-auto w-full min-w-0 px-3 pb-2 text-center sm:px-6 ${wideContent ? "max-w-none" : "max-w-5xl"}`}
+      >
         <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
           Created by {APP_AUTHOR_NAME}. © {year} {APP_AUTHOR_NAME}. All rights
           reserved.

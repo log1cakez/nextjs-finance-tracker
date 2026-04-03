@@ -309,9 +309,9 @@ export async function createRecurringExpense(
     dueWeekday,
   });
 
-  revalidatePath("/recurring");
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
   return { success: true };
 }
 
@@ -331,8 +331,8 @@ export async function deleteRecurringExpense(formData: FormData) {
       and(eq(recurringExpenses.id, id), eq(recurringExpenses.userId, userId)),
     );
 
-  revalidatePath("/recurring");
-  revalidatePath("/", "layout");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker", "layout");
 }
 
 export async function logRecurringExpense(formData: FormData) {
@@ -343,7 +343,7 @@ export async function logRecurringExpense(formData: FormData) {
 
   const id = formData.get("id");
   if (typeof id !== "string" || !z.string().uuid().safeParse(id).success) {
-    redirect("/recurring?error=" + encodeURIComponent("Invalid request"));
+    redirect("/financetracker/recurring?error=" + encodeURIComponent("Invalid request"));
   }
 
   const dateStr = formString(formData, "occurredAt") ?? "";
@@ -351,7 +351,7 @@ export async function logRecurringExpense(formData: FormData) {
     `${dateStr.length > 0 ? dateStr : new Date().toISOString().slice(0, 10)}T12:00:00`,
   );
   if (Number.isNaN(occurredAt.getTime())) {
-    redirect("/recurring?error=" + encodeURIComponent("Invalid date"));
+    redirect("/financetracker/recurring?error=" + encodeURIComponent("Invalid date"));
   }
 
   const db = getDb();
@@ -360,7 +360,7 @@ export async function logRecurringExpense(formData: FormData) {
   });
 
   if (!row) {
-    redirect("/recurring?error=" + encodeURIComponent("Not found"));
+    redirect("/financetracker/recurring?error=" + encodeURIComponent("Not found"));
   }
 
   const finAccount = await db.query.financialAccounts.findFirst({
@@ -382,7 +382,7 @@ export async function logRecurringExpense(formData: FormData) {
     row.currency !== finNorm.creditLimitCurrency
   ) {
     redirect(
-      "/recurring?error=" +
+      "/financetracker/recurring?error=" +
         encodeURIComponent(
           `This template is in ${row.currency} but the card’s limit is tracked in ${finNorm.creditLimitCurrency}. Edit the template currency or card settings so they match — then usage on Accounts will update correctly.`,
         ),
@@ -398,7 +398,7 @@ export async function logRecurringExpense(formData: FormData) {
     const m = parseAmountToMinor(amountStr);
     if (m === null) {
       redirect(
-        "/recurring?error=" +
+        "/financetracker/recurring?error=" +
           encodeURIComponent("Enter a valid positive amount for this item."),
       );
     }
@@ -419,13 +419,13 @@ export async function logRecurringExpense(formData: FormData) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
       redirect(
-        "/recurring?error=" +
+        "/financetracker/recurring?error=" +
           encodeURIComponent(
             "Set TRANSACTIONS_ENCRYPTION_KEY to log recurring items.",
           ),
       );
     }
-    redirect("/recurring?error=" + encodeURIComponent("Could not encrypt."));
+    redirect("/financetracker/recurring?error=" + encodeURIComponent("Could not encrypt."));
   }
 
   const rawPostingOverride =
@@ -440,7 +440,7 @@ export async function logRecurringExpense(formData: FormData) {
   ) {
     if (!z.string().uuid().safeParse(postingOverrideId).success) {
       redirect(
-        "/recurring?error=" + encodeURIComponent("Invalid pay-from account."),
+        "/financetracker/recurring?error=" + encodeURIComponent("Invalid pay-from account."),
       );
     }
     const fromAcc = await db.query.financialAccounts.findFirst({
@@ -451,12 +451,12 @@ export async function logRecurringExpense(formData: FormData) {
     });
     if (!fromAcc) {
       redirect(
-        "/recurring?error=" +
+        "/financetracker/recurring?error=" +
           encodeURIComponent("Pick a valid account to pay from."),
       );
     }
     if (!finAccount) {
-      redirect("/recurring?error=" + encodeURIComponent("Template account missing."));
+      redirect("/financetracker/recurring?error=" + encodeURIComponent("Template account missing."));
     }
     const fromName = decryptFinancePlaintext(userId, fromAcc.name);
     const cardName = decryptFinancePlaintext(userId, finAccount.name);
@@ -472,13 +472,13 @@ export async function logRecurringExpense(formData: FormData) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
         redirect(
-          "/recurring?error=" +
+          "/financetracker/recurring?error=" +
             encodeURIComponent(
               "Set TRANSACTIONS_ENCRYPTION_KEY to log this payment as a transfer.",
             ),
         );
       }
-      redirect("/recurring?error=" + encodeURIComponent("Could not encrypt."));
+      redirect("/financetracker/recurring?error=" + encodeURIComponent("Could not encrypt."));
     }
 
     await db.insert(accountTransfers).values({
@@ -491,19 +491,19 @@ export async function logRecurringExpense(formData: FormData) {
       occurredAt,
     });
 
-    revalidatePath("/", "layout");
-    revalidatePath("/transactions");
-    revalidatePath("/accounts");
-    revalidatePath("/recurring");
-    revalidatePath("/transfers");
-    redirect("/recurring?logged=1&type=transfer");
+    revalidatePath("/financetracker", "layout");
+    revalidatePath("/financetracker/transactions");
+    revalidatePath("/financetracker/accounts");
+    revalidatePath("/financetracker/recurring");
+    revalidatePath("/financetracker/transfers");
+    redirect("/financetracker/recurring?logged=1&type=transfer");
   }
 
   let financialAccountIdForTxn = row.financialAccountId;
   if (!paydown && postingOverrideId) {
     if (!z.string().uuid().safeParse(postingOverrideId).success) {
       redirect(
-        "/recurring?error=" + encodeURIComponent("Invalid account selection."),
+        "/financetracker/recurring?error=" + encodeURIComponent("Invalid account selection."),
       );
     }
     const overrideAcc = await db.query.financialAccounts.findFirst({
@@ -514,7 +514,7 @@ export async function logRecurringExpense(formData: FormData) {
     });
     if (!overrideAcc) {
       redirect(
-        "/recurring?error=" +
+        "/financetracker/recurring?error=" +
           encodeURIComponent("Pick a valid account for this log."),
       );
     }
@@ -525,7 +525,7 @@ export async function logRecurringExpense(formData: FormData) {
       row.currency !== oNorm.creditLimitCurrency
     ) {
       redirect(
-        "/recurring?error=" +
+        "/financetracker/recurring?error=" +
           encodeURIComponent(
             `Selected account’s card limit is in ${oNorm.creditLimitCurrency}; use template currency ${row.currency} or pick another account.`,
           ),
@@ -552,15 +552,15 @@ export async function logRecurringExpense(formData: FormData) {
     occurredAt,
   });
 
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/accounts");
-  revalidatePath("/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker/recurring");
   const q =
     row.kind === "income"
       ? "logged=1&type=income"
       : "logged=1&type=expense";
-  redirect(`/recurring?${q}`);
+  redirect(`/financetracker/recurring?${q}`);
 }
 
 export async function getRecurringExpenses() {

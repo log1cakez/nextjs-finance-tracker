@@ -6,7 +6,7 @@ import { signIn, signOut } from "@/auth";
 export type LoginState = { error?: string };
 
 export async function signInWithGoogle() {
-  await signIn("google", { redirectTo: "/" });
+  await signIn("google", { redirectTo: "/apps" });
 }
 
 export async function loginWithCredentials(
@@ -26,7 +26,7 @@ export async function loginWithCredentials(
     await signIn("credentials", {
       email: email.toLowerCase().trim(),
       password,
-      redirectTo: "/",
+      redirectTo: "/apps",
     });
   } catch (e) {
     if (e instanceof AuthError) {

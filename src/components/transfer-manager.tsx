@@ -77,7 +77,7 @@ export function TransferManager({
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Add at least two accounts on the{" "}
             <Link
-              href="/accounts"
+              href="/financetracker/accounts"
               className="font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-200"
             >
               Accounts
