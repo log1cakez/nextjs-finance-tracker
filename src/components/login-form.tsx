@@ -7,21 +7,20 @@ import {
   signInWithGoogle,
   type LoginState,
 } from "@/app/actions/auth";
+import {
+  useToastOnActionError,
+} from "@/components/center-toast";
 
 const initial: LoginState = {};
 
-export function LoginForm({
-  showGoogle,
-  passwordResetOk,
-}: {
-  showGoogle: boolean;
-  passwordResetOk?: boolean;
-}) {
+export function LoginForm({ showGoogle }: { showGoogle: boolean }) {
   const [state, formAction, pending] = useActionState(
     loginWithCredentials,
     initial,
   );
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Sign-in failed");
 
   useEffect(() => {
     if (state.error) {
@@ -31,11 +30,6 @@ export function LoginForm({
 
   return (
     <div className="space-y-6">
-      {passwordResetOk ? (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-          Password updated. Sign in with your new password.
-        </p>
-      ) : null}
       <form
         ref={formRef}
         action={formAction}
@@ -74,9 +68,6 @@ export function LoginForm({
             </Link>
           </div>
         </div>
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-        ) : null}
         <button
           type="submit"
           disabled={pending}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useCenterToast } from "@/components/center-toast";
 import { Spinner } from "@/components/spinner";
 
 function parseContentDispositionFilename(cd: string | null): string | null {
@@ -29,21 +30,30 @@ export function ExportExcelButton({
   className?: string;
 }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useCenterToast();
 
   async function onExport() {
-    setError(null);
     setBusy(true);
     try {
       const res = await fetch("/api/export/excel", {
         credentials: "same-origin",
       });
       if (res.status === 401) {
-        setError("Sign in to export.");
+        showToast({
+          kind: "error",
+          title: "Sign in required",
+          message: "Sign in to export.",
+          timeoutMs: 4500,
+        });
         return;
       }
       if (!res.ok) {
-        setError("Export failed. Try again.");
+        showToast({
+          kind: "error",
+          title: "Export failed",
+          message: "Try again in a moment.",
+          timeoutMs: 4500,
+        });
         return;
       }
       const blob = await res.blob();
@@ -59,7 +69,12 @@ export function ExportExcelButton({
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setError("Export failed. Try again.");
+      showToast({
+        kind: "error",
+        title: "Export failed",
+        message: "Try again in a moment.",
+        timeoutMs: 4500,
+      });
     } finally {
       setBusy(false);
     }
@@ -71,7 +86,7 @@ export function ExportExcelButton({
     "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900";
 
   return (
-    <span className={variant === "inline" ? "inline-flex flex-col gap-1" : ""}>
+    <span className={variant === "inline" ? "inline-flex" : ""}>
       <button
         type="button"
         role={variant === "menu" ? "menuitem" : undefined}
@@ -92,9 +107,6 @@ export function ExportExcelButton({
           "Export Excel (.xlsx)"
         )}
       </button>
-      {error ? (
-        <span className="text-xs text-rose-600 dark:text-rose-400">{error}</span>
-      ) : null}
     </span>
   );
 }

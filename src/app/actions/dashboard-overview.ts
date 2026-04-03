@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   accountTransfers,
@@ -28,6 +28,75 @@ import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 
+/**
+ * Outstanding lending principal split into a monthly-style projection vs a yearly cap.
+ * Installment loans use remaining principal ÷ remaining periods for the monthly figure and
+ * min(remaining, 12 × that) for yearly so /yr is not a duplicate of /mo when the loan runs
+ * longer than 12 months. Lump-sum: no implied monthly payment — monthly projection is 0;
+ * yearly still uses full remaining (obligation within the year view).
+ */
+function lendingOutstandingProjectionMinor(
+  repaymentStyle: "lump_sum" | "installment",
+  totalInstallments: number | null,
+  remainingCents: number,
+  installmentsPaid: number,
+): { monthlyMinor: number; yearlyMinor: number } {
+  if (remainingCents <= 0) {
+    return { monthlyMinor: 0, yearlyMinor: 0 };
+  }
+  if (
+    repaymentStyle === "installment" &&
+    totalInstallments != null &&
+    totalInstallments > 0
+  ) {
+    const paid = Math.min(Math.max(0, installmentsPaid), totalInstallments);
+    const remainingPeriods = Math.max(1, totalInstallments - paid);
+    const perPeriod = Math.ceil(remainingCents / remainingPeriods);
+    const yearly = Math.min(remainingCents, perPeriod * 12);
+    return { monthlyMinor: perPeriod, yearlyMinor: yearly };
+  }
+  return { monthlyMinor: 0, yearlyMinor: remainingCents };
+}
+
+/** Last N complete calendar months (excluding the current month), average expense transaction volume per month. */
+const PROJECTION_EXPENSE_AVG_MONTHS = 6;
+
+async function computeAverageMonthlyExpenseTransactionsMinor(
+  userId: string,
+): Promise<Record<FiatCurrency, number>> {
+  const sums: Record<FiatCurrency, number> = { USD: 0, PHP: 0 };
+  const now = new Date();
+  const rangeEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+  const rangeStart = new Date(
+    now.getFullYear(),
+    now.getMonth() - PROJECTION_EXPENSE_AVG_MONTHS,
+    1,
+  );
+
+  const db = getDb();
+  const rows = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      eq(transactions.kind, "expense"),
+      gte(transactions.occurredAt, rangeStart),
+      lt(transactions.occurredAt, rangeEnd),
+    ),
+  });
+
+  for (const row of rows) {
+    const tx = toDecryptedTransaction(userId, row);
+    const c = tx.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    sums[c] += tx.amountCents;
+  }
+
+  const out: Record<FiatCurrency, number> = { USD: 0, PHP: 0 };
+  for (const c of SUPPORTED_CURRENCIES) {
+    out[c] = Math.round(sums[c] / PROJECTION_EXPENSE_AVG_MONTHS);
+  }
+  return out;
+}
+
 export type CurrencyOverview = {
   assetsFromActivityMinor: number;
   liabilitiesFromActivityMinor: number;
@@ -38,10 +107,13 @@ export type CurrencyOverview = {
   /** Outstanding principal you still owe (payables), after recorded payments. */
   lendingPayablesOutstandingMinor: number;
   projectedIncomeMinor: number;
-  /** Recurring templates + lending payables (projection-only outgoing). */
+  /** Rolling average monthly expense from logged transactions (last 6 full months). */
+  projectedExpenseFromTransactionsMinor: number;
+  /** Recurring expense templates (monthly equivalent) + installment loan payment estimate per month. */
   projectedExpenseScheduledMinor: number;
-  /** Existing outgoing obligations already owed (currently credit cards). */
+  /** Credit card balances owed — shown for context; not included in monthly/yearly expense burn. */
   projectedExpenseExistingObligationsMinor: number;
+  /** Avg transactions/mo + scheduled (recurring + installment loans); excludes card balance and lump-sum principal. */
   projectedExpenseMinor: number;
   projectedIncomeYearlyMinor: number;
   projectedExpenseYearlyMinor: number;
@@ -55,6 +127,7 @@ function emptyOverview(): CurrencyOverview {
     lendingReceivablesOutstandingMinor: 0,
     lendingPayablesOutstandingMinor: 0,
     projectedIncomeMinor: 0,
+    projectedExpenseFromTransactionsMinor: 0,
     projectedExpenseScheduledMinor: 0,
     projectedExpenseExistingObligationsMinor: 0,
     projectedExpenseMinor: 0,
@@ -221,6 +294,13 @@ export async function computeDashboardOverviewByCurrency(
     PHP: emptyOverview(),
   };
 
+  const avgExpenseTxByCurrency =
+    await computeAverageMonthlyExpenseTransactionsMinor(userId);
+  for (const c of SUPPORTED_CURRENCIES) {
+    byCurrency[c].projectedExpenseFromTransactionsMinor =
+      avgExpenseTxByCurrency[c];
+  }
+
   const netByBucket = await mergeTransactionBucketsWithAccountOpenings(userId);
 
   const db = getDb();
@@ -279,9 +359,6 @@ export async function computeDashboardOverviewByCurrency(
     byCurrency[c].creditCardOutstandingMinor += owed;
     byCurrency[c].liabilitiesFromActivityMinor += owed;
     byCurrency[c].projectedExpenseExistingObligationsMinor += owed;
-    // Include card balances owed in projected outflow.
-    byCurrency[c].projectedExpenseMinor += owed;
-    byCurrency[c].projectedExpenseYearlyMinor += owed;
   }
 
   const recurringRows = await db.query.recurringExpenses.findMany({
@@ -310,7 +387,6 @@ export async function computeDashboardOverviewByCurrency(
       byCurrency[c].projectedIncomeYearlyMinor += yearly;
     } else {
       byCurrency[c].projectedExpenseScheduledMinor += monthly;
-      byCurrency[c].projectedExpenseMinor += monthly;
       byCurrency[c].projectedExpenseYearlyMinor += yearly;
     }
   }
@@ -331,17 +407,26 @@ export async function computeDashboardOverviewByCurrency(
       0,
     );
     const remainingCents = Math.max(0, L.principalCents - paidCents);
+    const installmentsPaid = payList.reduce(
+      (s, p) => s + (normalizeLendingPaymentRow(userId, p).installmentsCount ?? 1),
+      0,
+    );
+    const { monthlyMinor: lendMo, yearlyMinor: lendYr } =
+      lendingOutstandingProjectionMinor(
+        L.repaymentStyle,
+        L.totalInstallments,
+        remainingCents,
+        installmentsPaid,
+      );
     if (L.kind === "receivable") {
       byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
       // Also treat outstanding receivables as projected inflow.
-      byCurrency[c].projectedIncomeMinor += remainingCents;
-      byCurrency[c].projectedIncomeYearlyMinor += remainingCents;
+      byCurrency[c].projectedIncomeMinor += lendMo;
+      byCurrency[c].projectedIncomeYearlyMinor += lendYr;
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;
-      // Also treat outstanding payables as projected outflow.
-      byCurrency[c].projectedExpenseScheduledMinor += remainingCents;
-      byCurrency[c].projectedExpenseMinor += remainingCents;
-      byCurrency[c].projectedExpenseYearlyMinor += remainingCents;
+      byCurrency[c].projectedExpenseScheduledMinor += lendMo;
+      byCurrency[c].projectedExpenseYearlyMinor += lendYr;
     }
   }
 
@@ -350,6 +435,10 @@ export async function computeDashboardOverviewByCurrency(
       byCurrency[c].lendingReceivablesOutstandingMinor;
     byCurrency[c].liabilitiesFromActivityMinor +=
       byCurrency[c].lendingPayablesOutstandingMinor;
+    const txMo = byCurrency[c].projectedExpenseFromTransactionsMinor;
+    byCurrency[c].projectedExpenseMinor =
+      txMo + byCurrency[c].projectedExpenseScheduledMinor;
+    byCurrency[c].projectedExpenseYearlyMinor += txMo * 12;
   }
 
   return { byCurrency };
@@ -363,6 +452,8 @@ export async function computeDashboardOverviewByCurrency(
  * (which already includes transfers) is not double counted.
  * `creditCardOutstandingMinor` is part of liabilities.
  * `lending*` fields are the lending-only portions.
+ * Monthly projected expense burn = avg expense transactions (6 mo) + recurring + installment loan payments;
+ * credit card balance is liabilities only, not added to projected expense totals.
  */
 export async function getDashboardOverview(): Promise<{
   byCurrency: Record<FiatCurrency, CurrencyOverview>;

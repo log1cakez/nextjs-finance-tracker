@@ -10,6 +10,10 @@ import type { categories, financialAccounts } from "@/db/schema";
 import { SUPPORTED_CURRENCIES, type FiatCurrency } from "@/lib/money";
 import Link from "next/link";
 import { formatTypedLabel } from "@/lib/typed-label-format";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 
 type Category = typeof categories.$inferSelect;
 type FinAccount = typeof financialAccounts.$inferSelect;
@@ -30,7 +34,9 @@ export function TransactionForm({
     createTransaction,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+  useToastOnActionError(state.error, pending, "Could not save transaction");
   const [kind, setKind] = useState<"income" | "expense">("expense");
   const [currency, setCurrency] = useState<FiatCurrency>(defaultCurrency);
   const [accountId, setAccountId] = useState<string>("");
@@ -55,7 +61,8 @@ export function TransactionForm({
     formRef.current?.reset();
     setAccountId("");
     router.refresh();
-  }, [state.success, router]);
+    showToast({ kind: "success", title: "Saved", timeoutMs: 1800 });
+  }, [state.success, router, showToast]);
 
   return (
     <form
@@ -203,15 +210,6 @@ export function TransactionForm({
             </span>
           </span>
         </label>
-      ) : null}
-
-      {state.error ? (
-        <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-      ) : null}
-      {state.success ? (
-        <p className="text-sm text-emerald-600 dark:text-emerald-400">
-          Saved.
-        </p>
       ) : null}
 
       <button

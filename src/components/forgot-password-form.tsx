@@ -7,6 +7,10 @@ import {
   requestPasswordResetOtp,
   type RequestOtpState,
 } from "@/app/actions/password-reset";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 
 const initial: RequestOtpState = {};
 
@@ -16,16 +20,35 @@ export function ForgotPasswordForm() {
     requestPasswordResetOtp,
     initial,
   );
+  const { showToast } = useCenterToast();
   const redirected = useRef(false);
+  const prevPendingRef = useRef(pending);
+
+  useToastOnActionError(state.error, pending, "Could not send code");
 
   useEffect(() => {
     if (state.success && state.email && !redirected.current) {
       redirected.current = true;
+      showToast({ kind: "success", title: "Code sent", timeoutMs: 2200 });
       router.push(
         `/reset-password?email=${encodeURIComponent(state.email)}`,
       );
     }
-  }, [state.success, state.email, router]);
+  }, [state.success, state.email, router, showToast]);
+
+  useEffect(() => {
+    const ended = prevPendingRef.current && !pending;
+    prevPendingRef.current = pending;
+    if (ended && state.success && !state.email) {
+      showToast({
+        kind: "info",
+        title: "Check your email",
+        message:
+          "If an account with that email exists and uses a password, a code was sent. You can enter a code on the reset page if you already have one.",
+        timeoutMs: 9000,
+      });
+    }
+  }, [pending, state.success, state.email, showToast]);
 
   return (
     <form
@@ -38,27 +61,16 @@ export function ForgotPasswordForm() {
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         We’ll send a 6-digit code to your address. It expires in 15 minutes.
       </p>
-      {state.error ? (
-        <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-      ) : null}
-      {state.success && !state.email ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          If an account with that email exists and uses a password, a code was
-          sent. You can still{" "}
-          <Link
-            href="/reset-password"
-            className="font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
-          >
-            enter a code
-          </Link>{" "}
-          if you already received one.
-        </p>
-      ) : null}
-      {state.success && state.email ? (
-        <p className="text-sm text-emerald-600 dark:text-emerald-400">
-          Code sent — taking you to the next step…
-        </p>
-      ) : null}
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        Already have a code?{" "}
+        <Link
+          href="/reset-password"
+          className="font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
+        >
+          Enter it here
+        </Link>
+        .
+      </p>
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Email
         <input

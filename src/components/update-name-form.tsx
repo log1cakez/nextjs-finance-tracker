@@ -6,6 +6,10 @@ import {
   updateDisplayName,
   type UpdateNameState,
 } from "@/app/actions/account-profile";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: UpdateNameState = {};
@@ -16,13 +20,17 @@ export function UpdateNameForm({ initialName }: { initialName: string }) {
     updateDisplayName,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not update name");
 
   useEffect(() => {
     if (state.success) {
       router.refresh();
+      showToast({ kind: "success", title: "Name updated", timeoutMs: 2000 });
     }
-  }, [state.success, router]);
+  }, [state.success, router, showToast]);
 
   useEffect(() => {
     if (state.error) {
@@ -39,14 +47,6 @@ export function UpdateNameForm({ initialName }: { initialName: string }) {
       <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
         Display name
       </h2>
-      {state.success ? (
-        <p className="text-sm text-emerald-600 dark:text-emerald-400">
-          Name updated.
-        </p>
-      ) : null}
-      {state.error && !state.success ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>
-      ) : null}
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Name
         <input

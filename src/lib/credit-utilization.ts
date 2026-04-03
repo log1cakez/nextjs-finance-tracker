@@ -1,9 +1,10 @@
 import { and, eq, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accountTransfers, transactions } from "@/db/schema";
+import { accountTransfers, lendingPayments, transactions } from "@/db/schema";
 import type { FiatCurrency } from "@/lib/money";
 import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
+import { normalizeLendingPaymentRow, normalizeLendingRow } from "@/lib/lending-crypto";
 
 /**
  * Outstanding balance on a credit card (minor units), for one currency.
@@ -54,6 +55,22 @@ export async function computeCreditUsedCents(
     } else {
       used -= amt;
     }
+  }
+
+  // Lending payments linked to this credit card also affect outstanding balance.
+  // - Payable: you paid them (with card) -> increases used credit.
+  // - Receivable: they paid you (to card) -> decreases used credit.
+  const pays = await db.query.lendingPayments.findMany({
+    where: eq(lendingPayments.financialAccountId, financialAccountId),
+    with: { lending: true },
+  });
+  for (const p of pays) {
+    if (!p.lending || p.lending.userId !== userId) continue;
+    const loan = normalizeLendingRow(userId, p.lending);
+    if (loan.currency !== limitCurrency) continue;
+    const pay = normalizeLendingPaymentRow(userId, p);
+    if (loan.kind === "receivable") used -= pay.amountCents;
+    else used += pay.amountCents;
   }
 
   return used;

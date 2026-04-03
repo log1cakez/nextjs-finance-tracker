@@ -137,6 +137,7 @@ export async function createAccountTransfer(
   });
 
   revalidatePath("/transfers");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
   return { success: true };
 }
@@ -158,6 +159,7 @@ export async function deleteAccountTransfer(formData: FormData) {
     );
 
   revalidatePath("/transfers");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
 }
 

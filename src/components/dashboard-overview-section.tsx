@@ -26,11 +26,13 @@ export function DashboardOverviewSection({
           Accounts page), credit card balances owed for cards with a limit
           configured, and outstanding lending. Transfers between accounts are
           reflected in account nets (and in card utilization for credit cards
-          with limits). Not live bank balances. Projections include fixed-amount recurring templates plus
-          lending outstanding (receivables as projected income, payables as
-          projected expense) and credit card balances owed. Projected expenses
-          are split as Scheduled + Existing obligations. Variable recurring
-          amounts are excluded.
+          with limits). Not live bank balances. Projected expenses per month are
+          your average logged spending (last 6 full months) plus fixed recurring
+          amounts and installment loan payments only — not the full remaining
+          principal on lump-sum loans and not your total credit card balance
+          (that stays under liabilities). Receivable/income projections still
+          use installment pacing; lump receivables count in the yearly figure.
+          Variable recurring amounts are excluded.
         </p>
       </div>
 
@@ -78,13 +80,16 @@ export function DashboardOverviewSection({
               overview.projectedExpenseMinor,
               preferredCurrency,
             )}
-            hint={`Scheduled ${formatMoney(
+            hint={`Avg spend ${formatMoney(
+              overview.projectedExpenseFromTransactionsMinor,
+              preferredCurrency,
+            )} + Recurring & loans/mo ${formatMoney(
               overview.projectedExpenseScheduledMinor,
               preferredCurrency,
-            )} + Existing obligations ${formatMoney(
+            )} · Card balance ${formatMoney(
               overview.projectedExpenseExistingObligationsMinor,
               preferredCurrency,
-            )}`}
+            )} not included`}
             variant="expense"
           />
           <StatCard
@@ -93,6 +98,7 @@ export function DashboardOverviewSection({
               overview.projectedExpenseYearlyMinor,
               preferredCurrency,
             )}
+            hint="Avg spend × 12 + recurring annualized + lending (up to 12 payments); card balance not included"
             variant="expense"
           />
         </div>

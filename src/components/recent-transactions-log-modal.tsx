@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 // kept for backwards-compat (other imports may be added later)
 import { getRecentAccountActivity, type AccountActivityItem } from "@/app/actions/account-activity";
+import { useCenterToast } from "@/components/center-toast";
 import { formatMoney, type FiatCurrency } from "@/lib/money";
 import { Spinner } from "@/components/spinner";
 
@@ -25,15 +26,16 @@ export function AccountTransactionLogModal({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [mounted, setMounted] = useState(false);
   const [items, setItems] = useState<AccountActivityItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { showToast } = useCenterToast();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const load = useCallback(() => {
-    setError(null);
+    setLoadFailed(false);
     setLoading(true);
     setItems(null);
     void getRecentAccountActivity(accountId, FETCH_LIMIT)
@@ -41,13 +43,19 @@ export function AccountTransactionLogModal({
         setItems(data);
       })
       .catch(() => {
-        setError("Could not load transactions.");
+        setLoadFailed(true);
         setItems([]);
+        showToast({
+          kind: "error",
+          title: "Could not load activity",
+          message: "Check your connection and try again.",
+          timeoutMs: 5200,
+        });
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [accountId]);
+  }, [accountId, showToast]);
 
   const close = useCallback(() => {
     dialogRef.current?.close();
@@ -55,7 +63,7 @@ export function AccountTransactionLogModal({
 
   const open = useCallback(() => {
     setItems(null);
-    setError(null);
+    setLoadFailed(false);
     dialogRef.current?.showModal();
     load();
   }, [load]);
@@ -82,7 +90,7 @@ export function AccountTransactionLogModal({
               className="fixed left-1/2 top-1/2 z-[200] m-0 max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem))] min-h-[18rem] w-[min(26rem,calc(100vw-1.25rem))] max-w-[calc(100vw-1.25rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/50 backdrop:backdrop-blur-sm [&:not([open])]:hidden [&[open]]:flex [&[open]]:flex-col dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 sm:w-[min(30rem,calc(100vw-2rem))] sm:max-w-[min(30rem,calc(100vw-2rem))] md:max-w-xl md:w-[min(36rem,calc(100vw-2.5rem))]"
               onClose={() => {
                 setItems(null);
-                setError(null);
+                setLoadFailed(false);
                 setLoading(false);
               }}
               onPointerDown={onDialogPointerDown}
@@ -144,10 +152,19 @@ export function AccountTransactionLogModal({
                         Loading…
                       </p>
                     </div>
-                  ) : error ? (
-                    <p className="py-8 text-center text-sm text-rose-600 dark:text-rose-400">
-                      {error}
-                    </p>
+                  ) : loadFailed ? (
+                    <div className="flex flex-col items-center gap-3 py-10">
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        Nothing loaded.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => load()}
+                        className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      >
+                        Try again
+                      </button>
+                    </div>
                   ) : items && items.length === 0 ? (
                     <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
                       No activity for this account yet.

@@ -5,12 +5,15 @@ import {
   deleteAccount,
   type DeleteAccountState,
 } from "@/app/actions/delete-account";
+import { useToastOnActionError } from "@/components/center-toast";
 
 const initial: DeleteAccountState = {};
 
 export function DeleteAccountForm() {
   const [state, formAction, pending] = useActionState(deleteAccount, initial);
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not delete account");
 
   useEffect(() => {
     if (state.error) {
@@ -34,9 +37,6 @@ export function DeleteAccountForm() {
         accounts, categories, recurring items, lending records, and transfers).
         This cannot be undone.
       </p>
-      {state.error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>
-      ) : null}
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Type your password to confirm
         <input

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
+  accountTransfers,
   categories,
   financialAccounts,
   recurringExpenses,
@@ -427,6 +428,117 @@ export async function logRecurringExpense(formData: FormData) {
     redirect("/recurring?error=" + encodeURIComponent("Could not encrypt."));
   }
 
+  const rawPostingOverride =
+    formString(formData, "payFromFinancialAccountId")?.trim() ?? "";
+  const postingOverrideId =
+    rawPostingOverride.length > 0 ? rawPostingOverride : null;
+
+  if (
+    paydown &&
+    postingOverrideId &&
+    postingOverrideId !== row.financialAccountId
+  ) {
+    if (!z.string().uuid().safeParse(postingOverrideId).success) {
+      redirect(
+        "/recurring?error=" + encodeURIComponent("Invalid pay-from account."),
+      );
+    }
+    const fromAcc = await db.query.financialAccounts.findFirst({
+      where: and(
+        eq(financialAccounts.id, postingOverrideId),
+        eq(financialAccounts.userId, userId),
+      ),
+    });
+    if (!fromAcc) {
+      redirect(
+        "/recurring?error=" +
+          encodeURIComponent("Pick a valid account to pay from."),
+      );
+    }
+    if (!finAccount) {
+      redirect("/recurring?error=" + encodeURIComponent("Template account missing."));
+    }
+    const fromName = decryptFinancePlaintext(userId, fromAcc.name);
+    const cardName = decryptFinancePlaintext(userId, finAccount.name);
+    const transferDescription = `Recurring card payment: ${templateName} · ${fromName} → ${cardName}`;
+
+    let transferPayload: string;
+    try {
+      transferPayload = encryptTransactionPayload(userId, {
+        description: transferDescription,
+        amountCents: amountMinor,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("TRANSACTIONS_ENCRYPTION_KEY")) {
+        redirect(
+          "/recurring?error=" +
+            encodeURIComponent(
+              "Set TRANSACTIONS_ENCRYPTION_KEY to log this payment as a transfer.",
+            ),
+        );
+      }
+      redirect("/recurring?error=" + encodeURIComponent("Could not encrypt."));
+    }
+
+    await db.insert(accountTransfers).values({
+      userId,
+      fromFinancialAccountId: postingOverrideId,
+      toFinancialAccountId: row.financialAccountId,
+      amountCents: null,
+      currency: row.currency,
+      payload: transferPayload,
+      occurredAt,
+    });
+
+    revalidatePath("/", "layout");
+    revalidatePath("/transactions");
+    revalidatePath("/accounts");
+    revalidatePath("/recurring");
+    revalidatePath("/transfers");
+    redirect("/recurring?logged=1&type=transfer");
+  }
+
+  let financialAccountIdForTxn = row.financialAccountId;
+  if (!paydown && postingOverrideId) {
+    if (!z.string().uuid().safeParse(postingOverrideId).success) {
+      redirect(
+        "/recurring?error=" + encodeURIComponent("Invalid account selection."),
+      );
+    }
+    const overrideAcc = await db.query.financialAccounts.findFirst({
+      where: and(
+        eq(financialAccounts.id, postingOverrideId),
+        eq(financialAccounts.userId, userId),
+      ),
+    });
+    if (!overrideAcc) {
+      redirect(
+        "/recurring?error=" +
+          encodeURIComponent("Pick a valid account for this log."),
+      );
+    }
+    const oNorm = normalizeFinancialAccountRow(userId, overrideAcc);
+    if (
+      oNorm.bankKind === "credit" &&
+      oNorm.creditLimitCurrency != null &&
+      row.currency !== oNorm.creditLimitCurrency
+    ) {
+      redirect(
+        "/recurring?error=" +
+          encodeURIComponent(
+            `Selected account’s card limit is in ${oNorm.creditLimitCurrency}; use template currency ${row.currency} or pick another account.`,
+          ),
+      );
+    }
+    financialAccountIdForTxn = postingOverrideId;
+  }
+
+  const reducesCreditBalance =
+    paydown &&
+    financialAccountIdForTxn === row.financialAccountId &&
+    finNorm?.bankKind === "credit";
+
   await db.insert(transactions).values({
     userId,
     payload,
@@ -435,8 +547,8 @@ export async function logRecurringExpense(formData: FormData) {
     currency: row.currency,
     kind: row.kind,
     categoryId: row.categoryId,
-    financialAccountId: row.financialAccountId,
-    reducesCreditBalance: paydown,
+    financialAccountId: financialAccountIdForTxn,
+    reducesCreditBalance,
     occurredAt,
   });
 

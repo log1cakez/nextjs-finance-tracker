@@ -1,5 +1,9 @@
 import { getFinancialAccountsWithUsage } from "@/app/actions/financial-accounts";
 import { AccountManager } from "@/components/account-manager";
+import {
+  ServerFlashToast,
+  type ServerFlashMessage,
+} from "@/components/server-flash-toast";
 import { getPreferredCurrency } from "@/lib/preferences";
 
 export default async function AccountsPage({
@@ -12,6 +16,16 @@ export default async function AccountsPage({
     getPreferredCurrency(),
   ]);
   const sp = await searchParams;
+
+  const deleteBlockedFlash: ServerFlashMessage | null =
+    sp.error === "in_use"
+      ? {
+          kind: "error",
+          title: "Cannot delete account",
+          message:
+            "That account still has transactions, recurring templates, or transfers. Reassign or remove those before deleting the account.",
+        }
+      : null;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -28,12 +42,7 @@ export default async function AccountsPage({
         </p>
       </div>
 
-      {sp.error === "in_use" ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-          That account still has transactions, recurring templates, or
-          transfers. Reassign or remove those before deleting the account.
-        </p>
-      ) : null}
+      <ServerFlashToast flash={deleteBlockedFlash} />
 
       <AccountManager items={items} defaultCurrency={preferredCurrency} />
     </div>

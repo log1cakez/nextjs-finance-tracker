@@ -685,8 +685,31 @@ export async function updateFinancialAccountBasics(
       if (!curRaw || !SUPPORTED_CURRENCIES.includes(curRaw)) {
         return { error: "Pick a currency for the starting balance" };
       }
-      openingBalanceCents = h;
-      openingBalanceCurrency = curRaw;
+      // Treat entered value as "current balance now" and back-compute the starting
+      // balance so the displayed remaining balance matches what the user entered.
+      const desiredCurrentCents = h;
+      const desiredCurrency = curRaw as FiatCurrency;
+      const otherCurrency: FiatCurrency = desiredCurrency === "USD" ? "PHP" : "USD";
+      const usdToPhp = await getUsdToPhpRateFromDbOrEnv();
+      const netThis = await computeAccountNetActivityCents(
+        userId,
+        acc.id,
+        desiredCurrency,
+      );
+      const netOther = await computeAccountNetActivityCents(
+        userId,
+        acc.id,
+        otherCurrency,
+      );
+      const netOtherConverted = convertMinorUnitsWithRate(
+        netOther,
+        otherCurrency,
+        desiredCurrency,
+        usdToPhp,
+      );
+      const startingCents = desiredCurrentCents - (netThis + netOtherConverted);
+      openingBalanceCents = startingCents;
+      openingBalanceCurrency = desiredCurrency;
     }
   }
 

@@ -17,6 +17,10 @@ import {
 } from "@/app/actions/recurring-expenses";
 import type { categories, financialAccounts } from "@/db/schema";
 import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
+import {
   formatMoney,
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
@@ -41,6 +45,7 @@ type RecurringKind = "income" | "expense";
 
 type RecurringRow = {
   id: string;
+  financialAccountId: string;
   kind: RecurringKind;
   name: string;
   amountCents: number | null;
@@ -109,9 +114,11 @@ function recurringLogDefaultDate(row: RecurringRow, now: Date): string {
 function FrequencyGroups({
   items,
   now,
+  accountsList,
 }: {
   items: RecurringRow[];
   now: Date;
+  accountsList: FinAccount[];
 }) {
   const byFrequency = RECURRING_FREQUENCIES.map((freq) => ({
     freq,
@@ -147,6 +154,14 @@ function FrequencyGroups({
                 const paydownNote = row.creditPaydown
                   ? "Card bill payment — reduces balance owed"
                   : null;
+                const payFromOptions =
+                  row.kind === "expense" &&
+                  row.creditPaydown &&
+                  row.financialAccount
+                    ? accountsList.filter(
+                        (a) => a.id !== row.financialAccount!.id,
+                      )
+                    : accountsList;
                 const variableMetaLine = variable
                   ? [
                       "Amount varies — enter when you log",
@@ -218,6 +233,37 @@ function FrequencyGroups({
                               className="min-h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-[7.5rem] sm:max-w-[10rem] sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
                             />
                           ) : null}
+                          <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 sm:w-auto dark:text-zinc-400">
+                            {row.kind === "expense" && row.creditPaydown
+                              ? "Pay from"
+                              : "Account for this log"}
+                            <select
+                              name="payFromFinancialAccountId"
+                              defaultValue=""
+                              className="mt-1 min-h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:w-[min(100%,12rem)] sm:px-2 sm:py-1.5 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                            >
+                              <option value="">
+                                {row.kind === "expense" && row.creditPaydown
+                                  ? "— Card only (no other account) —"
+                                  : "— Template account —"}
+                              </option>
+                              {payFromOptions.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                            {row.kind === "expense" && row.creditPaydown ? (
+                              <span className="mt-1 font-normal text-zinc-500 dark:text-zinc-400">
+                                Bank/e-wallet moves money to the card (see
+                                Transfers). Blank = paydown on the card only.
+                              </span>
+                            ) : (
+                              <span className="mt-1 font-normal text-zinc-500 dark:text-zinc-400">
+                                Override which account this entry is recorded on.
+                              </span>
+                            )}
+                          </label>
                           <input
                             type="date"
                             name="occurredAt"
@@ -276,7 +322,11 @@ export function RecurringExpenseManager({
     createRecurringExpense,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not save template");
+
   const [frequency, setFrequency] = useState<string>("");
   const [recKind, setRecKind] = useState<RecurringKind>("expense");
   const [variableAmount, setVariableAmount] = useState(false);
@@ -299,7 +349,8 @@ export function RecurringExpenseManager({
       setTemplateAccountId("");
       setDueDayOfMonthInput("");
     });
-  }, [state.success]);
+    showToast({ kind: "success", title: "Template saved", timeoutMs: 2200 });
+  }, [state.success, showToast]);
 
   const categoryList =
     recKind === "expense" ? expenseCategories : incomeCategories;
@@ -607,15 +658,6 @@ export function RecurringExpenseManager({
           ) : null}
         </div>
 
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-        ) : null}
-        {state.success ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            Template saved.
-          </p>
-        ) : null}
-
         <button
           type="submit"
           disabled={pending || accountsList.length === 0}
@@ -629,14 +671,22 @@ export function RecurringExpenseManager({
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Recurring expenses
         </h2>
-        <FrequencyGroups items={expenseItems} now={now} />
+        <FrequencyGroups
+          items={expenseItems}
+          now={now}
+          accountsList={accountsList}
+        />
       </section>
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Recurring income
         </h2>
-        <FrequencyGroups items={incomeItems} now={now} />
+        <FrequencyGroups
+          items={incomeItems}
+          now={now}
+          accountsList={accountsList}
+        />
       </section>
     </div>
   );

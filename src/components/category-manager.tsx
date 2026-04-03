@@ -8,6 +8,10 @@ import {
   type CategoryActionState,
 } from "@/app/actions/categories";
 import type { categories } from "@/db/schema";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 import { formatTypedLabel } from "@/lib/typed-label-format";
 
 type Category = typeof categories.$inferSelect;
@@ -16,7 +20,9 @@ const initial: CategoryActionState = {};
 
 export function CategoryManager({ items }: { items: Category[] }) {
   const [state, formAction, pending] = useActionState(createCategory, initial);
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+  useToastOnActionError(state.error, pending, "Could not add category");
   const [kind, setKind] = useState<"income" | "expense">("expense");
   const [nameInput, setNameInput] = useState("");
   const [suggestions, setSuggestions] = useState<{ name: string }[]>([]);
@@ -29,8 +35,9 @@ export function CategoryManager({ items }: { items: Category[] }) {
       setNameInput("");
       setSuggestions([]);
       setHighlight(-1);
+      showToast({ kind: "success", title: "Category added", timeoutMs: 2000 });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   useEffect(() => {
     const q = nameInput.trim();
@@ -163,16 +170,6 @@ export function CategoryManager({ items }: { items: Category[] }) {
             {pending ? "Adding…" : "Add"}
           </button>
         </div>
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">
-            {state.error}
-          </p>
-        ) : null}
-        {state.success ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            Category added.
-          </p>
-        ) : null}
       </form>
 
       <div className="grid gap-8 sm:grid-cols-2">

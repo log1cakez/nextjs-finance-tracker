@@ -73,6 +73,11 @@ export function monthBounds(d = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
+/** Local end-of-day for `d` (23:59:59.999). */
+export function endOfLocalDay(d = new Date()): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
 export function totalsByCurrency(
   txs: {
     kind: "income" | "expense";

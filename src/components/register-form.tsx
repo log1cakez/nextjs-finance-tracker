@@ -3,29 +3,39 @@
 import { useActionState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { registerUser, type RegisterState } from "@/app/actions/register";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 import { formatTypedLabel } from "@/lib/typed-label-format";
 
 const initial: RegisterState = {};
 
 export function RegisterForm() {
   const [state, formAction, pending] = useActionState(registerUser, initial);
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not create account");
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
+      showToast({
+        kind: "success",
+        title: "Account created",
+        message: "You can sign in now.",
+        timeoutMs: 2600,
+      });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   if (state.success) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-6 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
-        <p className="font-medium text-emerald-900 dark:text-emerald-100">
-          Account created. You can sign in now.
-        </p>
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50">
         <Link
           href="/login"
-          className="mt-4 inline-flex rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="inline-flex rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
         >
           Go to sign in
         </Link>
@@ -80,9 +90,6 @@ export function RegisterForm() {
           At least 8 characters
         </span>
       </label>
-      {state.error ? (
-        <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-      ) : null}
       <button
         type="submit"
         disabled={pending}

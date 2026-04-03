@@ -4,10 +4,17 @@ import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { categories, financialAccounts, transactions } from "@/db/schema";
+import {
+  categories,
+  financialAccounts,
+  lendingPayments,
+  transactions,
+} from "@/db/schema";
+import { normalizeLendingPaymentRow, normalizeLendingRow } from "@/lib/lending-crypto";
 import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
 import { getSessionUserId } from "@/lib/session";
 import {
+  endOfLocalDay,
   parseAmountToMinor,
   SUPPORTED_CURRENCIES,
   type FiatCurrency,
@@ -232,6 +239,64 @@ export async function getTransactionsForMonth(
   return computeTransactionsForMonthRange(userId, start, end);
 }
 
+function emptyMonthTotals(): Record<
+  FiatCurrency,
+  { income: number; expense: number }
+> {
+  return {
+    USD: { income: 0, expense: 0 },
+    PHP: { income: 0, expense: 0 },
+  };
+}
+
+/**
+ * All recorded income/expense through `asOfEnd` (inclusive): transactions plus lending
+ * payments (receivable = in, payable = out), by currency.
+ */
+export async function computeActualTotalsByCurrencyThrough(
+  userId: string,
+  asOfEnd: Date,
+): Promise<Record<FiatCurrency, { income: number; expense: number }>> {
+  const out = emptyMonthTotals();
+  const db = getDb();
+
+  const txRows = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      lte(transactions.occurredAt, asOfEnd),
+    ),
+  });
+  for (const row of txRows) {
+    const t = toDecryptedTransaction(userId, row);
+    const c = t.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    if (t.kind === "income") {
+      out[c].income += t.amountCents;
+    } else {
+      out[c].expense += t.amountCents;
+    }
+  }
+
+  const pays = await db.query.lendingPayments.findMany({
+    where: lte(lendingPayments.paidAt, asOfEnd),
+    with: { lending: true },
+  });
+  for (const p of pays) {
+    if (!p.lending || p.lending.userId !== userId) continue;
+    const loan = normalizeLendingRow(userId, p.lending);
+    const pay = normalizeLendingPaymentRow(userId, p);
+    const c = loan.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    if (loan.kind === "receivable") {
+      out[c].income += pay.amountCents;
+    } else {
+      out[c].expense += pay.amountCents;
+    }
+  }
+
+  return out;
+}
+
 export async function getRecentTransactions(
   limit = 10,
 ): Promise<TransactionWithCategory[]> {
@@ -295,7 +360,75 @@ export type MonthlyCashflowPoint = {
   expenseMinor: number;
 };
 
-/** Last `monthCount` calendar months of income/expense in `currency` (actual transactions). */
+/**
+ * Expense transactions (incl. card paydown rows) from the 1st of this calendar month
+ * through end of today (local), plus lending payments on payables. Matches the expense side
+ * of the cashflow chart for the current month. Transfers are not expenses.
+ */
+export async function computeCurrentMonthExpensesByCurrency(
+  userId: string,
+): Promise<Record<FiatCurrency, number>> {
+  const out: Record<FiatCurrency, number> = { USD: 0, PHP: 0 };
+  const now = new Date();
+  const monthStart = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+  const dataThrough = endOfLocalDay(now);
+  const db = getDb();
+
+  const txRows = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      eq(transactions.kind, "expense"),
+      gte(transactions.occurredAt, monthStart),
+      lte(transactions.occurredAt, dataThrough),
+    ),
+  });
+  for (const row of txRows) {
+    const tx = toDecryptedTransaction(userId, row);
+    const c = tx.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    out[c] += tx.amountCents;
+  }
+
+  const payRows = await db.query.lendingPayments.findMany({
+    where: and(
+      gte(lendingPayments.paidAt, monthStart),
+      lte(lendingPayments.paidAt, dataThrough),
+    ),
+    with: { lending: true },
+  });
+  for (const row of payRows) {
+    if (!row.lending || row.lending.userId !== userId) continue;
+    const loan = normalizeLendingRow(userId, row.lending);
+    if (loan.kind !== "payable") continue;
+    const pay = normalizeLendingPaymentRow(userId, row);
+    const c = loan.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    out[c] += pay.amountCents;
+  }
+
+  return out;
+}
+
+export async function getCurrentMonthExpensesByCurrency(): Promise<Record<
+  FiatCurrency,
+  number
+> | null> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return null;
+  }
+  return computeCurrentMonthExpensesByCurrency(userId);
+}
+
+/** Last `monthCount` calendar months of income/expense in `currency` (transactions + lending payments). */
 export async function computeMonthlyCashflowTrend(
   userId: string,
   currency: (typeof SUPPORTED_CURRENCIES)[number],
@@ -322,6 +455,7 @@ export async function computeMonthlyCashflowTrend(
     59,
     999,
   );
+  const dataThrough = endOfLocalDay(now);
 
   const buckets = new Map<
     string,
@@ -350,6 +484,7 @@ export async function computeMonthlyCashflowTrend(
     const tx = toDecryptedTransaction(userId, row);
     if (tx.currency !== currency) continue;
     const od = new Date(tx.occurredAt);
+    if (od.getTime() > dataThrough.getTime()) continue;
     const key = `${od.getFullYear()}-${String(od.getMonth() + 1).padStart(2, "0")}`;
     const b = buckets.get(key);
     if (!b) continue;
@@ -357,6 +492,30 @@ export async function computeMonthlyCashflowTrend(
       b.incomeMinor += tx.amountCents;
     } else {
       b.expenseMinor += tx.amountCents;
+    }
+  }
+
+  const payRows = await db.query.lendingPayments.findMany({
+    where: and(
+      gte(lendingPayments.paidAt, rangeStart),
+      lte(lendingPayments.paidAt, rangeEnd),
+    ),
+    with: { lending: true },
+  });
+  for (const row of payRows) {
+    if (!row.lending || row.lending.userId !== userId) continue;
+    const loan = normalizeLendingRow(userId, row.lending);
+    const pay = normalizeLendingPaymentRow(userId, row);
+    if (loan.currency !== currency) continue;
+    const od = new Date(row.paidAt);
+    if (od.getTime() > dataThrough.getTime()) continue;
+    const key = `${od.getFullYear()}-${String(od.getMonth() + 1).padStart(2, "0")}`;
+    const b = buckets.get(key);
+    if (!b) continue;
+    if (loan.kind === "receivable") {
+      b.incomeMinor += pay.amountCents;
+    } else {
+      b.expenseMinor += pay.amountCents;
     }
   }
 

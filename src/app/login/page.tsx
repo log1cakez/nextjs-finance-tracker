@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AuthPageLogo } from "@/components/auth-page-logo";
 import { LoginForm } from "@/components/login-form";
+import { LoginFlashToasts } from "@/components/server-flash-toast";
 import { APP_TAGLINE } from "@/lib/brand";
 
 export default async function LoginPage({
@@ -33,15 +34,11 @@ export default async function LoginPage({
           {APP_TAGLINE}
         </p>
       </div>
-      {accountDeleted ? (
-        <p
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-          role="status"
-        >
-          Your account has been deleted. You can register again anytime.
-        </p>
-      ) : null}
-      <LoginForm showGoogle={showGoogle} passwordResetOk={passwordResetOk} />
+      <LoginFlashToasts
+        accountDeleted={accountDeleted}
+        passwordResetOk={passwordResetOk}
+      />
+      <LoginForm showGoogle={showGoogle} />
       <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
         No account?{" "}
         <Link

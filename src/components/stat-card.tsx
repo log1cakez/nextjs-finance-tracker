@@ -1,13 +1,17 @@
+import type { ReactNode } from "react";
+
 export function StatCard({
   label,
   value,
   hint,
   variant,
+  children,
 }: {
   label: string;
   value: string;
   hint?: string;
   variant: "neutral" | "income" | "expense";
+  children?: ReactNode;
 }) {
   const styles = {
     neutral:
@@ -32,6 +36,11 @@ export function StatCard({
         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
           {hint}
         </p>
+      ) : null}
+      {children ? (
+        <div className="mt-4 border-t border-zinc-900/[0.06] pt-4 dark:border-white/10">
+          {children}
+        </div>
       ) : null}
     </div>
   );

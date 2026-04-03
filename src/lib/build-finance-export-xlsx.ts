@@ -5,8 +5,8 @@ import {
   mergeTransactionBucketsWithAccountOpenings,
 } from "@/app/actions/dashboard-overview";
 import {
+  computeActualTotalsByCurrencyThrough,
   computeMonthlyCashflowTrend,
-  computeTransactionsForMonthRange,
 } from "@/app/actions/transactions";
 import { getDb } from "@/db";
 import {
@@ -26,7 +26,7 @@ import {
   normalizeLendingPaymentRow,
   normalizeLendingRow,
 } from "@/lib/lending-crypto";
-import { monthBounds, totalsByCurrency, type FiatCurrency } from "@/lib/money";
+import { endOfLocalDay, type FiatCurrency } from "@/lib/money";
 import { SUPPORTED_CURRENCIES } from "@/lib/money";
 import { resolveRecurringAmountCents } from "@/lib/recurring-amount-crypto";
 import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
@@ -80,9 +80,10 @@ export async function buildFinanceExportXlsxBuffer(
   userId: string,
   options: FinanceExportOptions,
 ): Promise<Buffer> {
-  const { start: monthStart, end: monthEnd } = monthBounds();
-  const monthLabel = monthStart.toLocaleDateString(undefined, {
-    month: "long",
+  const asOfEnd = endOfLocalDay();
+  const asOfLabel = asOfEnd.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
     year: "numeric",
   });
   const exportedAt = new Date().toISOString();
@@ -90,7 +91,7 @@ export async function buildFinanceExportXlsxBuffer(
   const [
     { byCurrency },
     buckets,
-    monthTx,
+    totalsAll,
     cashflowUsd,
     cashflowPhp,
     txRows,
@@ -102,7 +103,7 @@ export async function buildFinanceExportXlsxBuffer(
   ] = await Promise.all([
     computeDashboardOverviewByCurrency(userId),
     mergeTransactionBucketsWithAccountOpenings(userId),
-    computeTransactionsForMonthRange(userId, monthStart, monthEnd),
+    computeActualTotalsByCurrencyThrough(userId, asOfEnd),
     computeMonthlyCashflowTrend(userId, "USD", 6),
     computeMonthlyCashflowTrend(userId, "PHP", 6),
     dbQueryTransactions(userId),
@@ -113,7 +114,6 @@ export async function buildFinanceExportXlsxBuffer(
     dbQueryLendings(userId),
   ]);
 
-  const monthTotals = totalsByCurrency(monthTx);
   const wb = XLSX.utils.book_new();
 
   const usd = byCurrency.USD;
@@ -226,10 +226,16 @@ export async function buildFinanceExportXlsxBuffer(
       Notes: "",
     },
     {
+      Metric: "Avg expense transactions / mo (6-mo window)",
+      USD: minorToMajor(usd.projectedExpenseFromTransactionsMinor),
+      PHP: minorToMajor(php.projectedExpenseFromTransactionsMinor),
+      Notes: "Logged expenses; excludes current month",
+    },
+    {
       Metric: "Projected expenses / month",
       USD: minorToMajor(usd.projectedExpenseMinor),
       PHP: minorToMajor(php.projectedExpenseMinor),
-      Notes: "",
+      Notes: "Avg tx + recurring + installment loans; no card balance or lump principal",
     },
     {
       Metric: "Projected net / month",
@@ -265,27 +271,27 @@ export async function buildFinanceExportXlsxBuffer(
     },
     { Metric: "", USD: "", PHP: "", Notes: "" },
     {
-      Metric: `— This month (actual): ${monthLabel} —`,
+      Metric: `— Totals as of now (${asOfLabel}) —`,
       USD: "",
       PHP: "",
-      Notes: "",
+      Notes: "All transactions + lending through today; no future-dated rows",
     },
     {
-      Metric: "Income (actual)",
-      USD: minorToMajor(monthTotals.USD.income),
-      PHP: minorToMajor(monthTotals.PHP.income),
-      Notes: "",
+      Metric: "Total income (to date)",
+      USD: minorToMajor(totalsAll.USD.income),
+      PHP: minorToMajor(totalsAll.PHP.income),
+      Notes: "Transactions + lending received (all history through as-of)",
     },
     {
-      Metric: "Expenses (actual)",
-      USD: minorToMajor(monthTotals.USD.expense),
-      PHP: minorToMajor(monthTotals.PHP.expense),
-      Notes: "",
+      Metric: "Total expenses (to date)",
+      USD: minorToMajor(totalsAll.USD.expense),
+      PHP: minorToMajor(totalsAll.PHP.expense),
+      Notes: "Transactions + lending paid (all history through as-of)",
     },
     {
-      Metric: "Net (actual)",
-      USD: minorToMajor(monthTotals.USD.income - monthTotals.USD.expense),
-      PHP: minorToMajor(monthTotals.PHP.income - monthTotals.PHP.expense),
+      Metric: "Net (to date)",
+      USD: minorToMajor(totalsAll.USD.income - totalsAll.USD.expense),
+      PHP: minorToMajor(totalsAll.PHP.income - totalsAll.PHP.expense),
       Notes: "",
     },
     { Metric: "", USD: "", PHP: "", Notes: "" },

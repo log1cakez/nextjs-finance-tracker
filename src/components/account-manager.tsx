@@ -15,6 +15,10 @@ import {
 } from "@/app/actions/financial-accounts";
 import { AccountTransactionLogModal } from "@/components/recent-transactions-log-modal";
 import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
+import {
   FINANCE_ACCOUNT_LABELS,
   FINANCE_ACCOUNT_TYPE_ORDER,
   type FinanceAccountKind,
@@ -54,11 +58,9 @@ function BankActivityLine({
   return (
     <p className="mt-2 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
       <span className="font-medium text-zinc-800 dark:text-zinc-200">
-        Balance ({currency})
+        Remaining balance ({currency})
       </span>
-      : {formatMoney(netCents, currency)} — starting balance you set (if any)
-      plus net from transactions, recurring logs, and transfers. Amounts in the
-      other supported currency are converted to {currency} for this display.
+      : {formatMoney(netCents, currency)}
     </p>
   );
 }
@@ -95,6 +97,7 @@ function CreditUsageBar({
   const pct =
     limitCents > 0 ? Math.min(100, Math.round((usedCents / limitCents) * 100)) : 0;
   const over = usedCents > limitCents;
+  const remaining = Math.max(0, limitCents - usedCents);
   return (
     <div className="mt-2 space-y-1">
       <div className="flex flex-wrap justify-between gap-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -105,6 +108,9 @@ function CreditUsageBar({
           <span className="font-medium text-rose-600 dark:text-rose-400">Over limit</span>
         ) : null}
       </div>
+      <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+        Remaining available: {formatMoney(remaining, currency)}
+      </p>
       <div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
         <div
           className={`h-full rounded-full transition-[width] ${
@@ -134,14 +140,18 @@ function BankCreditEditForm({
     updateBankCreditSettings,
     creditUpdateInitial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not save credit settings");
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
       setOpen(false);
+      showToast({ kind: "success", title: "Saved", timeoutMs: 1800 });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   if (
     account.type !== "bank" ||
@@ -240,12 +250,6 @@ function BankCreditEditForm({
               </span>
             </label>
           </div>
-          {state.error ? (
-            <p className="text-xs text-rose-600 dark:text-rose-400">{state.error}</p>
-          ) : null}
-          {state.success ? (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Saved.</p>
-          ) : null}
           <button
             type="submit"
             disabled={pending}
@@ -272,13 +276,17 @@ function AccountBasicsEditForm({
     isCreditCard ? updateCreditAccountDetails : updateFinancialAccountBasics,
     isCreditCard ? creditAccountDetailsInitial : accountBasicsInitial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not save account");
 
   useEffect(() => {
     if (state.success) {
       setOpen(false);
+      showToast({ kind: "success", title: "Saved", timeoutMs: 1800 });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   return (
     <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
@@ -307,7 +315,7 @@ function AccountBasicsEditForm({
           {!isCreditCard ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Starting balance (optional)
+                Set current balance now (optional)
                 <input
                   name="heldAmount"
                   inputMode="decimal"
@@ -319,6 +327,9 @@ function AccountBasicsEditForm({
                   placeholder="0.00"
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
                 />
+                <span className="mt-1 block text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
+                  We’ll recompute the starting balance based on your existing activity.
+                </span>
               </label>
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Balance currency
@@ -406,12 +417,6 @@ function AccountBasicsEditForm({
               </div>
             </>
           )}
-          {state.error ? (
-            <p className="text-xs text-rose-600 dark:text-rose-400">{state.error}</p>
-          ) : null}
-          {state.success ? (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Saved.</p>
-          ) : null}
           <button
             type="submit"
             disabled={pending}
@@ -436,17 +441,21 @@ export function AccountManager({
     createFinancialAccount,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [accountType, setAccountType] = useState<FinanceAccountKind>("bank");
   const [bankKind, setBankKind] = useState<"debit" | "credit">("debit");
+
+  useToastOnActionError(state.error, pending, "Could not add account");
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
       setAccountType("bank");
       setBankKind("debit");
+      showToast({ kind: "success", title: "Account added", timeoutMs: 2200 });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   const byType = FINANCE_ACCOUNT_TYPE_ORDER.map((type) => ({
     type,
@@ -538,7 +547,7 @@ export function AccountManager({
         {accountType !== "bank" || bankKind === "debit" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Starting balance (optional)
+              Current balance when you started tracking (optional)
               <input
                 name="heldAmount"
                 inputMode="decimal"
@@ -627,15 +636,6 @@ export function AccountManager({
               </span>
             </label>
           </div>
-        ) : null}
-
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-        ) : null}
-        {state.success ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            Account added.
-          </p>
         ) : null}
       </form>
 

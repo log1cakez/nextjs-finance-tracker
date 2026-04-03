@@ -5,22 +5,28 @@ export type LendingSecurePayload = {
   counterpartyName: string;
   principalCents: number;
   notes: string | null;
+  /** For installment loans: total count of payments/months expected. */
+  totalInstallments?: number | null;
 };
 
 export type LendingPaymentSecurePayload = {
   amountCents: number;
   note: string | null;
+  /** Optional: when importing past installment payments as a single aggregate row. */
+  installmentsCount?: number | null;
 };
 
 export type LendingRowNormalized = typeof lendings.$inferSelect & {
   counterpartyName: string;
   principalCents: number;
   notes: string | null;
+  totalInstallments: number | null;
 };
 
 export type LendingPaymentRowNormalized = typeof lendingPayments.$inferSelect & {
   amountCents: number;
   note: string | null;
+  installmentsCount: number | null;
 };
 
 export function normalizeLendingRow(
@@ -37,6 +43,10 @@ export function normalizeLendingRow(
       counterpartyName: d.counterpartyName,
       principalCents: d.principalCents,
       notes: d.notes,
+      totalInstallments:
+        typeof d.totalInstallments === "number" && d.totalInstallments > 0
+          ? Math.floor(d.totalInstallments)
+          : null,
     };
   }
   return {
@@ -44,6 +54,7 @@ export function normalizeLendingRow(
     counterpartyName: row.counterpartyName ?? "",
     principalCents: row.principalCents ?? 0,
     notes: row.notes ?? null,
+    totalInstallments: null,
   };
 }
 
@@ -60,11 +71,16 @@ export function normalizeLendingPaymentRow(
       ...row,
       amountCents: d.amountCents,
       note: d.note,
+      installmentsCount:
+        typeof d.installmentsCount === "number" && d.installmentsCount > 0
+          ? Math.floor(d.installmentsCount)
+          : null,
     };
   }
   return {
     ...row,
     amountCents: row.amountCents ?? 0,
     note: row.note ?? null,
+    installmentsCount: null,
   };
 }

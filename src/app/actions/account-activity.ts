@@ -153,12 +153,35 @@ export async function getRecentAccountActivity(
       loan.kind === "receivable"
         ? `${loan.counterpartyName} paid you`
         : `You paid ${loan.counterpartyName}`;
+    const instMeta =
+      loan.repaymentStyle === "installment" &&
+      typeof pay.installmentsCount === "number" &&
+      pay.installmentsCount > 1
+        ? ` · ${pay.installmentsCount} installments`
+        : "";
+    const progressMeta =
+      loan.repaymentStyle === "installment" && loan.totalInstallments != null
+        ? (() => {
+            const paidCount = paymentRows
+              .filter(
+                (x) =>
+                  x.lendingId === row.lendingId &&
+                  x.paidAt.getTime() <= row.paidAt.getTime(),
+              )
+              .reduce(
+                (s, x) =>
+                  s + (normalizeLendingPaymentRow(userId, x).installmentsCount ?? 1),
+                0,
+              );
+            return ` · ${paidCount}/${loan.totalInstallments}`;
+          })()
+        : "";
     out.push({
       id: row.id,
       occurredAt: row.paidAt.toISOString(),
       type: "lending_payment",
       title: who,
-      subtitle: `Lending payment · ${formatMoney(pay.amountCents, c)}${pay.note ? ` · ${pay.note}` : ""}`,
+      subtitle: `Lending payment · ${formatMoney(pay.amountCents, c)}${progressMeta}${instMeta}${pay.note ? ` · ${pay.note}` : ""}`,
       amountCents: pay.amountCents,
       currency: c,
       sign,

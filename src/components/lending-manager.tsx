@@ -10,12 +10,21 @@ import {
 import {
   addLendingPayment,
   createLending,
+  updateLending,
+  updateLendingPayment,
   deleteLending,
   deleteLendingPayment,
   type LendingPaymentActionState,
   type LendingWithPayments,
   type LendingActionState,
+  type UpdateLendingActionState,
+  type UpdateLendingPaymentActionState,
 } from "@/app/actions/lending";
+import type { LendingPaymentRowNormalized } from "@/lib/lending-crypto";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 import {
   formatMoney,
   SUPPORTED_CURRENCIES,
@@ -25,6 +34,41 @@ import { formatTypedBlock, formatTypedLabel } from "@/lib/typed-label-format";
 
 const createInitial: LendingActionState = {};
 const payInitial: LendingPaymentActionState = {};
+const updateInitial: UpdateLendingActionState = {};
+const payEditInitial: UpdateLendingPaymentActionState = {};
+
+function centsToDecimalInput(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+function dateInputValue(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Installment loans only: ceil(remaining ÷ periods left) from total installments
+ * minus installments already recorded (via payment rows).
+ */
+function estimatedPaymentPerMonthInfo(
+  lending: LendingWithPayments["lending"],
+  remainingCents: number,
+  installmentsPaidCount: number,
+): { amountCents: number; periodsLeft: number } | null {
+  if (remainingCents <= 0) return null;
+  if (lending.repaymentStyle !== "installment") return null;
+  if (lending.totalInstallments == null || lending.totalInstallments < 1) {
+    return null;
+  }
+  const paid = Math.min(
+    Math.max(0, installmentsPaidCount),
+    lending.totalInstallments,
+  );
+  const periodsLeft = Math.max(1, lending.totalInstallments - paid);
+  return {
+    amountCents: Math.ceil(remainingCents / periodsLeft),
+    periodsLeft,
+  };
+}
 
 function LendingPaymentForm({
   lendingId,
@@ -41,7 +85,10 @@ function LendingPaymentForm({
     addLendingPayment,
     payInitial,
   );
+  const { showToast } = useCenterToast();
   const ref = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not record payment");
 
   useEffect(() => {
     if (!state.success) return;
@@ -50,7 +97,8 @@ function LendingPaymentForm({
       'input[name="paidAt"]',
     );
     if (d) d.value = defaultDate;
-  }, [state.success, defaultDate]);
+    showToast({ kind: "success", title: "Payment recorded", timeoutMs: 2000 });
+  }, [state.success, defaultDate, showToast]);
 
   if (disabled) {
     return (
@@ -121,24 +169,161 @@ function LendingPaymentForm({
       >
         {pending ? "…" : "Record payment"}
       </button>
-      {state.error ? (
-        <p className="w-full text-xs text-rose-600 dark:text-rose-400">
-          {state.error}
-        </p>
-      ) : null}
     </form>
+  );
+}
+
+function LendingPaymentListItem({
+  payment,
+  currency,
+}: {
+  payment: LendingPaymentRowNormalized;
+  currency: FiatCurrency;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [state, formAction, pending] = useActionState(
+    updateLendingPayment,
+    payEditInitial,
+  );
+  const { showToast } = useCenterToast();
+
+  useToastOnActionError(state.error, pending, "Could not update payment");
+
+  useEffect(() => {
+    if (!state.success) return;
+    setEditing(false);
+    showToast({ kind: "success", title: "Payment updated", timeoutMs: 1800 });
+  }, [state.success, showToast]);
+
+  const paidAt =
+    payment.paidAt instanceof Date
+      ? payment.paidAt
+      : new Date(payment.paidAt);
+
+  if (editing) {
+    return (
+      <li
+        className="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/60"
+      >
+        <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <input type="hidden" name="id" value={payment.id} />
+          <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 sm:w-[7.5rem] dark:text-zinc-400">
+            Amount
+            <input
+              name="amount"
+              required
+              inputMode="decimal"
+              defaultValue={centsToDecimalInput(payment.amountCents)}
+              className="mt-1 min-h-10 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+            />
+          </label>
+          <label className="flex w-full min-w-0 flex-col text-xs font-medium text-zinc-600 sm:w-auto dark:text-zinc-400">
+            Date
+            <input
+              name="paidAt"
+              type="date"
+              required
+              defaultValue={dateInputValue(paidAt)}
+              className="mt-1 min-h-10 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+            />
+          </label>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <button
+              type="submit"
+              disabled={pending}
+              className="min-h-10 rounded-lg bg-zinc-900 px-3 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {pending ? "…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="min-h-10 rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-200"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex flex-col gap-2 rounded-lg bg-zinc-50/80 px-2 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:bg-transparent sm:px-0 sm:py-0 dark:bg-zinc-900/40 dark:sm:bg-transparent">
+      <div className="min-w-0">
+        <span className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
+          {formatMoney(payment.amountCents, currency)}
+        </span>
+        <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+          {paidAt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })}
+        </span>
+        {payment.note ? (
+          <span className="mt-1 block break-words text-xs text-zinc-500 dark:text-zinc-400">
+            {payment.note}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-1 self-end sm:self-auto">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="min-h-10 rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+        >
+          Edit
+        </button>
+        <form action={deleteLendingPayment} className="inline">
+          <input type="hidden" name="id" value={payment.id} />
+          <button
+            type="submit"
+            className="min-h-10 min-w-[2.75rem] touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-200 hover:text-rose-600 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
+          >
+            Delete
+          </button>
+        </form>
+      </div>
+    </li>
   );
 }
 
 function LendingCard({
   row,
   accountsList,
+  defaultCurrency,
 }: {
   row: LendingWithPayments;
   accountsList: { id: string; name: string }[];
+  defaultCurrency: FiatCurrency;
 }) {
   const { lending, payments, paidCents, remainingCents } = row;
   const c = lending.currency as FiatCurrency;
+  const [editing, setEditing] = useState(false);
+  const [editState, editAction, editPending] = useActionState(
+    updateLending,
+    updateInitial,
+  );
+  const editRef = useRef<HTMLFormElement>(null);
+  const { showToast } = useCenterToast();
+
+  useToastOnActionError(editState.error, editPending, "Could not save loan");
+
+  useEffect(() => {
+    if (!editState.success) return;
+    setEditing(false);
+    showToast({ kind: "success", title: "Saved", timeoutMs: 1800 });
+  }, [editState.success, showToast]);
+  const paymentsPaidCount = payments.reduce(
+    (s, p) => s + (p.installmentsCount ?? 1),
+    0,
+  );
+  const estMonthly = estimatedPaymentPerMonthInfo(
+    lending,
+    remainingCents,
+    paymentsPaidCount,
+  );
   const pct =
     lending.principalCents > 0
       ? Math.min(100, Math.round((paidCents / lending.principalCents) * 100))
@@ -168,16 +353,157 @@ function LendingCard({
             </p>
           ) : null}
         </div>
-        <form action={deleteLending} className="shrink-0 lg:self-start">
+        <div className="shrink-0 lg:self-start">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setEditing((v) => !v);
+              }}
+              className="min-h-10 w-full touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 active:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100 dark:active:bg-zinc-800 sm:w-auto sm:text-xs"
+            >
+              {editing ? "Cancel edit" : "Edit"}
+            </button>
+            <form action={deleteLending} className="sm:self-start">
+              <input type="hidden" name="id" value={lending.id} />
+              <button
+                type="submit"
+                className="min-h-10 w-full touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-rose-600 active:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-rose-400 dark:active:bg-zinc-800 sm:w-auto sm:text-xs"
+              >
+                Remove loan
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {editing ? (
+        <form
+          ref={editRef}
+          action={editAction}
+          className="mt-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/30"
+        >
           <input type="hidden" name="id" value={lending.id} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:col-span-2">
+              Counterparty name
+              <input
+                name="counterpartyName"
+                required
+                maxLength={120}
+                defaultValue={lending.counterpartyName}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                onBlur={(e) => {
+                  e.currentTarget.value = formatTypedLabel(e.currentTarget.value);
+                }}
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Principal amount
+              <input
+                name="amount"
+                required
+                inputMode="decimal"
+                defaultValue={centsToDecimalInput(lending.principalCents)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              />
+              {paidCents > 0 ? (
+                <span className="mt-1 block text-[11px] font-normal text-zinc-500 dark:text-zinc-400">
+                  Must be ≥ paid so far ({formatMoney(paidCents, c)})
+                </span>
+              ) : null}
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Currency
+              <select
+                name="currency"
+                defaultValue={lending.currency ?? defaultCurrency}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                {SUPPORTED_CURRENCIES.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Type
+              <select
+                name="kind"
+                defaultValue={lending.kind}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                <option value="receivable">Receivable</option>
+                <option value="payable">Payable</option>
+              </select>
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Repayment
+              <select
+                name="repaymentStyle"
+                defaultValue={lending.repaymentStyle}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                <option value="lump_sum">Lump sum</option>
+                <option value="installment">Installment</option>
+              </select>
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Total months / installments
+              <input
+                name="totalInstallments"
+                inputMode="numeric"
+                defaultValue={
+                  lending.totalInstallments != null
+                    ? String(lending.totalInstallments)
+                    : ""
+                }
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                placeholder="e.g. 12"
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:col-span-2">
+              Start date
+              <input
+                name="startedAt"
+                type="date"
+                required
+                defaultValue={dateInputValue(new Date(lending.startedAt))}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:col-span-2">
+              Notes (optional)
+              <textarea
+                name="notes"
+                rows={2}
+                maxLength={2000}
+                defaultValue={lending.notes ?? ""}
+                className="mt-1 min-h-[4.5rem] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-0 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                onBlur={(e) => {
+                  e.currentTarget.value = formatTypedBlock(e.currentTarget.value);
+                }}
+              />
+            </label>
+          </div>
+
           <button
             type="submit"
-            className="min-h-10 w-full touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-rose-600 active:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-rose-400 dark:active:bg-zinc-800 sm:w-auto sm:text-xs"
+            disabled={editPending}
+            className="min-h-11 w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 sm:min-h-9 sm:w-auto sm:text-xs dark:bg-zinc-100 dark:text-zinc-900"
           >
-            Remove loan
+            {editPending ? "Saving…" : "Save changes"}
           </button>
         </form>
-      </div>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 sm:gap-2">
         <div>
@@ -187,7 +513,15 @@ function LendingCard({
           </p>
         </div>
         <div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Paid so far</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Paid so far
+            {lending.repaymentStyle === "installment" &&
+            lending.totalInstallments != null
+              ? ` · ${paymentsPaidCount}/${lending.totalInstallments}`
+              : lending.repaymentStyle === "installment" && paymentsPaidCount > 0
+                ? ` · ${paymentsPaidCount} payment${paymentsPaidCount === 1 ? "" : "s"}`
+                : ""}
+          </p>
           <p className="break-words font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
             {formatMoney(paidCents, c)}
           </p>
@@ -205,6 +539,34 @@ function LendingCard({
           </p>
         </div>
       </div>
+
+      {estMonthly ? (
+        <div className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50/50 px-3 py-2.5 dark:border-amber-900/50 dark:bg-amber-950/25">
+          <p className="text-xs font-medium text-amber-900/90 dark:text-amber-100/90">
+            Estimated payment / month
+          </p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+            {formatMoney(estMonthly.amountCents, c)}
+          </p>
+          <p className="mt-1 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+            Remaining balance ÷ {estMonthly.periodsLeft} period
+            {estMonthly.periodsLeft === 1 ? "" : "s"} left in the plan (simple
+            estimate, not amortized interest).
+          </p>
+        </div>
+      ) : remainingCents > 0 &&
+        lending.repaymentStyle === "installment" &&
+        (lending.totalInstallments == null || lending.totalInstallments < 1) ? (
+        <p className="mt-3 rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100/90">
+          Edit the loan and set total months/installments to see an estimated
+          payment per month.
+        </p>
+      ) : remainingCents > 0 && lending.repaymentStyle === "lump_sum" ? (
+        <p className="mt-3 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          Lump-sum loan: there is no scheduled monthly amount. The remaining
+          balance is the amount still to pay.
+        </p>
+      ) : null}
 
       <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800 sm:h-2">
         <div
@@ -227,37 +589,7 @@ function LendingCard({
             Payments
           </p>
           {payments.map((p) => (
-            <li
-              key={p.id}
-              className="flex flex-col gap-2 rounded-lg bg-zinc-50/80 px-2 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:bg-transparent sm:px-0 sm:py-0 dark:bg-zinc-900/40 dark:sm:bg-transparent"
-            >
-              <div className="min-w-0">
-                <span className="font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {formatMoney(p.amountCents, c)}
-                </span>
-                <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {new Date(p.paidAt).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {p.note ? (
-                  <span className="mt-1 block break-words text-xs text-zinc-500 dark:text-zinc-400">
-                    {p.note}
-                  </span>
-                ) : null}
-              </div>
-              <form action={deleteLendingPayment} className="shrink-0 self-end sm:self-auto">
-                <input type="hidden" name="id" value={p.id} />
-                <button
-                  type="submit"
-                  className="min-h-10 min-w-[2.75rem] touch-manipulation rounded-lg px-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-200 hover:text-rose-600 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400 sm:min-h-0 sm:text-xs"
-                >
-                  Delete
-                </button>
-              </form>
-            </li>
+            <LendingPaymentListItem key={p.id} payment={p} currency={c} />
           ))}
         </ul>
       ) : null}
@@ -287,14 +619,24 @@ export function LendingManager({
     createLending,
     createInitial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [kind, setKind] = useState<"receivable" | "payable">("receivable");
+  const [repaymentStyle, setRepaymentStyle] = useState<
+    "lump_sum" | "installment"
+  >("lump_sum");
+
+  useToastOnActionError(state.error, pending, "Could not add loan");
 
   useEffect(() => {
     if (!state.success) return;
     formRef.current?.reset();
-    startTransition(() => setKind("receivable"));
-  }, [state.success]);
+    startTransition(() => {
+      setKind("receivable");
+      setRepaymentStyle("lump_sum");
+    });
+    showToast({ kind: "success", title: "Saved", timeoutMs: 2000 });
+  }, [state.success, showToast]);
 
   const receivables = items.filter((x) => x.lending.kind === "receivable");
   const payables = items.filter((x) => x.lending.kind === "payable");
@@ -406,13 +748,31 @@ export function LendingManager({
             Repayment
             <select
               name="repaymentStyle"
-              defaultValue="lump_sum"
+              value={repaymentStyle}
+              onChange={(e) =>
+                setRepaymentStyle(e.target.value as "lump_sum" | "installment")
+              }
               className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             >
               <option value="lump_sum">Lump sum (one payment)</option>
               <option value="installment">Installment (multiple payments)</option>
             </select>
           </label>
+
+          {repaymentStyle === "installment" ? (
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Total months / installments
+              <input
+                name="totalInstallments"
+                required
+                inputMode="numeric"
+                className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                placeholder="e.g. 12 or 36"
+              />
+            </label>
+          ) : (
+            <input type="hidden" name="totalInstallments" value="" />
+          )}
 
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Loan start date
@@ -424,6 +784,59 @@ export function LendingManager({
               className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             />
           </label>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300 sm:col-span-2">
+            <p className="font-medium text-zinc-800 dark:text-zinc-100">
+              Already paid (optional)
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              If you already made repayments before adding this loan, record the total paid so far here. Optionally link it to an account so it appears in that account’s Transaction log.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Amount already paid
+                <input
+                  name="alreadyPaidAmount"
+                  inputMode="decimal"
+                  className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  placeholder="0.00"
+                />
+              </label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Paid date
+                <input
+                  name="alreadyPaidAt"
+                  type="date"
+                  defaultValue={today}
+                  className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                />
+              </label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Installments already paid (optional)
+                <input
+                  name="alreadyPaidInstallments"
+                  inputMode="numeric"
+                  className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                  placeholder="e.g. 3"
+                />
+              </label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Account (optional)
+                <select
+                  name="alreadyPaidAccountId"
+                  defaultValue=""
+                  className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+                >
+                  <option value="">—</option>
+                  {accountsList.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
 
           <label className="block text-sm font-medium text-zinc-700 sm:col-span-2 dark:text-zinc-300">
             Notes (optional)
@@ -439,15 +852,6 @@ export function LendingManager({
             />
           </label>
         </div>
-
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-        ) : null}
-        {state.success ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            Saved.
-          </p>
-        ) : null}
 
         <button
           type="submit"
@@ -473,6 +877,7 @@ export function LendingManager({
                 key={row.lending.id}
                 row={row}
                 accountsList={accountsList}
+                defaultCurrency={defaultCurrency}
               />
             ))}
           </ul>
@@ -494,6 +899,7 @@ export function LendingManager({
                 key={row.lending.id}
                 row={row}
                 accountsList={accountsList}
+                defaultCurrency={defaultCurrency}
               />
             ))}
           </ul>

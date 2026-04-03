@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/app-shell";
 import { ExtensionAttrCleanup } from "@/components/extension-attr-cleanup";
+import { CenterToastProvider } from "@/components/center-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APP_DESCRIPTION, APP_PAGE_TITLE } from "@/lib/brand";
 import { getPreferredCurrency } from "@/lib/preferences";
@@ -71,11 +72,13 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         <ExtensionAttrCleanup />
         <ThemeProvider>
-          <div className="midas-page-bg flex min-h-full flex-col bg-zinc-50 dark:bg-zinc-950">
-            <AppShell user={user} preferredCurrency={preferredCurrency}>
-              {children}
-            </AppShell>
-          </div>
+          <CenterToastProvider>
+            <div className="midas-page-bg flex min-h-full flex-col bg-zinc-50 dark:bg-zinc-950">
+              <AppShell user={user} preferredCurrency={preferredCurrency}>
+                {children}
+              </AppShell>
+            </div>
+          </CenterToastProvider>
         </ThemeProvider>
       </body>
     </html>

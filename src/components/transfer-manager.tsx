@@ -15,6 +15,10 @@ import {
   type TransferListItem,
 } from "@/app/actions/account-transfers";
 import type { financialAccounts } from "@/db/schema";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 import { formatTypedLabel } from "@/lib/typed-label-format";
 import {
   formatMoney,
@@ -39,14 +43,18 @@ export function TransferManager({
     createAccountTransfer,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [fromId, setFromId] = useState<string>("");
+
+  useToastOnActionError(state.error, pending, "Could not save transfer");
 
   useEffect(() => {
     if (!state.success) return;
     formRef.current?.reset();
     startTransition(() => setFromId(""));
-  }, [state.success]);
+    showToast({ kind: "success", title: "Transfer saved", timeoutMs: 2200 });
+  }, [state.success, showToast]);
 
   const toOptions = accountsList.filter((a) => a.id !== fromId);
 
@@ -168,15 +176,6 @@ export function TransferManager({
             </label>
           </div>
         )}
-
-        {state.error ? (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-        ) : null}
-        {state.success ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            Transfer saved.
-          </p>
-        ) : null}
 
         <button
           type="submit"

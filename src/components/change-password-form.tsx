@@ -5,6 +5,10 @@ import {
   changePassword,
   type ChangePasswordState,
 } from "@/app/actions/change-password";
+import {
+  useCenterToast,
+  useToastOnActionError,
+} from "@/components/center-toast";
 
 const initial: ChangePasswordState = {};
 
@@ -13,13 +17,21 @@ export function ChangePasswordForm() {
     changePassword,
     initial,
   );
+  const { showToast } = useCenterToast();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not update password");
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
+      showToast({
+        kind: "success",
+        title: "Password updated",
+        timeoutMs: 2200,
+      });
     }
-  }, [state.success]);
+  }, [state.success, showToast]);
 
   useEffect(() => {
     if (state.error) {
@@ -38,14 +50,6 @@ export function ChangePasswordForm() {
       <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
         Change password
       </h2>
-      {state.success ? (
-        <p className="text-sm text-emerald-600 dark:text-emerald-400">
-          Password updated successfully.
-        </p>
-      ) : null}
-      {state.error && !state.success ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>
-      ) : null}
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Current password
         <input

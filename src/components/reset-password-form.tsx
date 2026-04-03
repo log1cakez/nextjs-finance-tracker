@@ -7,6 +7,7 @@ import {
   resetPasswordWithOtp,
   type ResetPasswordState,
 } from "@/app/actions/password-reset";
+import { useToastOnActionError } from "@/components/center-toast";
 
 const initial: ResetPasswordState = {};
 
@@ -17,6 +18,8 @@ export function ResetPasswordForm({ defaultEmail = "" }: { defaultEmail?: string
     initial,
   );
   const formRef = useRef<HTMLFormElement>(null);
+
+  useToastOnActionError(state.error, pending, "Could not update password");
 
   useEffect(() => {
     if (state.success) {
@@ -39,9 +42,6 @@ export function ResetPasswordForm({ defaultEmail = "" }: { defaultEmail?: string
       <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
         New password
       </h2>
-      {state.error ? (
-        <p className="text-sm text-rose-600 dark:text-rose-400">{state.error}</p>
-      ) : null}
       <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Email
         <input
