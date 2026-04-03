@@ -148,10 +148,10 @@ export async function createCategory(
     throw err;
   }
 
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/categories");
-  revalidatePath("/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/categories");
+  revalidatePath("/financetracker/recurring");
   return { success: true };
 }
 
@@ -167,10 +167,10 @@ export async function deleteCategory(formData: FormData) {
   await getDb()
     .delete(categories)
     .where(and(eq(categories.id, id), eq(categories.userId, userId)));
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/categories");
-  revalidatePath("/recurring");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/categories");
+  revalidatePath("/financetracker/recurring");
 }
 
 export async function getCategories() {

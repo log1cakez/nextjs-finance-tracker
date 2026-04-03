@@ -23,7 +23,8 @@ export default async function TransactionsPage() {
         <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
           Income and expenses below use the form. The full log includes transfers
           and lending payments too (same as the dashboard feed), newest first.
-          Export all data as Excel from your name menu → Export Excel (.xlsx).
+          Export as Excel from your name menu while using Finance Tracker
+          (same button switches to EOD export when you are on EOD Tracker).
         </p>
       </div>
 

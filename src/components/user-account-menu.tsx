@@ -69,7 +69,15 @@ export function UserAccountMenu({
           role="menu"
         >
           <Link
-            href="/account"
+            href="/apps"
+            role="menuitem"
+            className="block px-3 py-3 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700"
+            onClick={() => setOpen(false)}
+          >
+            App dashboard
+          </Link>
+          <Link
+            href="/financetracker/account"
             role="menuitem"
             className="block px-3 py-3 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700"
             onClick={() => setOpen(false)}

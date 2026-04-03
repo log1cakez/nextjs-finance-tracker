@@ -329,11 +329,11 @@ export async function createFinancialAccount(
     throw err;
   }
 
-  revalidatePath("/accounts");
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/recurring");
-  revalidatePath("/transfers");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker/transfers");
   return { success: true };
 }
 
@@ -459,8 +459,8 @@ export async function updateBankCreditSettings(
       and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
     );
 
-  revalidatePath("/accounts");
-  revalidatePath("/", "layout");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker", "layout");
   return { success: true };
 }
 
@@ -603,11 +603,11 @@ export async function updateCreditAccountDetails(
       and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
     );
 
-  revalidatePath("/accounts");
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/recurring");
-  revalidatePath("/transfers");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker/transfers");
   return { success: true };
 }
 
@@ -741,11 +741,11 @@ export async function updateFinancialAccountBasics(
       and(eq(financialAccounts.id, parsed.data.id), eq(financialAccounts.userId, userId)),
     );
 
-  revalidatePath("/accounts");
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/recurring");
-  revalidatePath("/transfers");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker/transfers");
   return { success: true };
 }
 
@@ -776,7 +776,7 @@ export async function deleteFinancialAccount(formData: FormData) {
     ),
   });
   if (txInUse || recurringInUse || transferInUse) {
-    redirect("/accounts?error=in_use");
+    redirect("/financetracker/accounts?error=in_use");
   }
 
   await db
@@ -785,11 +785,11 @@ export async function deleteFinancialAccount(formData: FormData) {
       and(eq(financialAccounts.id, id), eq(financialAccounts.userId, userId)),
     );
 
-  revalidatePath("/accounts");
-  revalidatePath("/", "layout");
-  revalidatePath("/transactions");
-  revalidatePath("/recurring");
-  revalidatePath("/transfers");
+  revalidatePath("/financetracker/accounts");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker/recurring");
+  revalidatePath("/financetracker/transfers");
 }
 
 export async function getFinancialAccounts() {

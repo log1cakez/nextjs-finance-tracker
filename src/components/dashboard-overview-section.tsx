@@ -117,7 +117,7 @@ export function DashboardOverviewSection({
           owed on cards with a credit limit set (same utilization as the Accounts
           page) is included in liabilities above.{" "}
           <Link
-            href="/accounts"
+            href="/financetracker/accounts"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
           >
             Manage accounts
@@ -143,7 +143,7 @@ export function DashboardOverviewSection({
           )}{" "}
           payable are already included in assets and liabilities above.{" "}
           <Link
-            href="/lending"
+            href="/financetracker/lending"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
           >
             Manage lending

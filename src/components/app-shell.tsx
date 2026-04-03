@@ -12,13 +12,13 @@ import type { FiatCurrency } from "@/lib/money";
 const HIDE_HEADER_PATHS = new Set(["/login", "/register"]);
 
 export const mainNav = [
-  { href: "/", label: "Dashboard" },
-  { href: "/transactions", label: "Transactions" },
-  { href: "/accounts", label: "Accounts" },
-  { href: "/transfers", label: "Transfers" },
-  { href: "/lending", label: "Lending" },
-  { href: "/recurring", label: "Recurring" },
-  { href: "/categories", label: "Categories" },
+  { href: "/financetracker", label: "Dashboard" },
+  { href: "/financetracker/transactions", label: "Transactions" },
+  { href: "/financetracker/accounts", label: "Accounts" },
+  { href: "/financetracker/transfers", label: "Transfers" },
+  { href: "/financetracker/lending", label: "Lending" },
+  { href: "/financetracker/recurring", label: "Recurring" },
+  { href: "/financetracker/categories", label: "Categories" },
 ] as const;
 
 export function AppShell({
@@ -32,6 +32,9 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const hideHeader = pathname ? HIDE_HEADER_PATHS.has(pathname) : false;
+  const wideContent = pathname?.startsWith("/eod-tracker") ?? false;
+  const financetrackerNavPad =
+    Boolean(user) && (pathname?.startsWith("/financetracker") ?? false);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -44,9 +47,11 @@ export function AppShell({
         </div>
       ) : (
         <header className="border-b border-zinc-200/80 bg-gradient-to-b from-amber-500/[0.06] to-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md dark:border-zinc-800 dark:from-amber-500/[0.08] dark:to-zinc-950/90">
-          <div className="mx-auto flex max-w-5xl flex-col gap-3 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4">
+          <div
+            className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4 ${wideContent ? "max-w-none" : "max-w-5xl"}`}
+          >
             <Link
-              href={user ? "/" : "/login"}
+              href={user ? "/apps" : "/login"}
               className="flex min-h-16 min-w-0 w-full shrink-0 items-center justify-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950 sm:min-h-[4.5rem] sm:w-auto sm:shrink-0 sm:justify-start sm:self-auto"
             >
               <BrandMark />
@@ -86,12 +91,18 @@ export function AppShell({
         </header>
       )}
       <main
-        className={`mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 ${hideHeader ? "pt-10 sm:pt-12" : ""} ${user ? "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]" : "pb-[env(safe-area-inset-bottom,0px)]"}`}
+        className={`mx-auto flex w-full min-w-0 flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 ${wideContent ? "max-w-none" : "max-w-5xl"} ${hideHeader ? "pt-10 sm:pt-12" : ""} ${
+          financetrackerNavPad
+            ? "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
+            : "pb-[env(safe-area-inset-bottom,0px)]"
+        }`}
       >
         {children}
         <SiteFooter />
       </main>
-      {user ? <FloatingNavBar items={mainNav} /> : null}
+      {user && pathname?.startsWith("/financetracker") ? (
+        <FloatingNavBar items={mainNav} />
+      ) : null}
     </div>
   );
 }

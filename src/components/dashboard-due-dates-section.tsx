@@ -52,7 +52,7 @@ export function DashboardDueDatesSection({
           </p>
         </div>
         <Link
-          href="/recurring"
+          href="/financetracker/recurring"
           className="mt-2 shrink-0 text-xs font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400 sm:mt-0"
         >
           Recurring
@@ -63,14 +63,14 @@ export function DashboardDueDatesSection({
         <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
           Nothing scheduled yet. Add{" "}
           <Link
-            href="/recurring"
+            href="/financetracker/recurring"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
           >
             recurring income or expenses
           </Link>{" "}
           or set a payment due day on a{" "}
           <Link
-            href="/accounts"
+            href="/financetracker/accounts"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
           >
             credit card

@@ -276,9 +276,9 @@ export async function createLending(
     });
   }
 
-  revalidatePath("/lending");
-  revalidatePath("/", "layout");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/accounts");
   return { success: true };
 }
 
@@ -406,8 +406,8 @@ export async function updateLending(
     })
     .where(and(eq(lendings.id, parsed.data.id), eq(lendings.userId, userId)));
 
-  revalidatePath("/lending");
-  revalidatePath("/", "layout");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker", "layout");
   return { success: true };
 }
 
@@ -425,8 +425,8 @@ export async function deleteLending(formData: FormData) {
     .delete(lendings)
     .where(and(eq(lendings.id, id), eq(lendings.userId, userId)));
 
-  revalidatePath("/lending");
-  revalidatePath("/", "layout");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker", "layout");
 }
 
 const addPaymentSchema = z.object({
@@ -548,10 +548,10 @@ export async function addLendingPayment(
     paidAt,
   });
 
-  revalidatePath("/lending");
-  revalidatePath("/transactions");
-  revalidatePath("/", "layout");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/accounts");
   return { success: true };
 }
 
@@ -659,10 +659,10 @@ export async function updateLendingPayment(
     })
     .where(eq(lendingPayments.id, parsed.data.id));
 
-  revalidatePath("/lending");
-  revalidatePath("/transactions");
-  revalidatePath("/", "layout");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/accounts");
   return { success: true };
 }
 
@@ -689,8 +689,8 @@ export async function deleteLendingPayment(formData: FormData) {
     .delete(lendingPayments)
     .where(eq(lendingPayments.id, id));
 
-  revalidatePath("/lending");
-  revalidatePath("/transactions");
-  revalidatePath("/", "layout");
-  revalidatePath("/accounts");
+  revalidatePath("/financetracker/lending");
+  revalidatePath("/financetracker/transactions");
+  revalidatePath("/financetracker", "layout");
+  revalidatePath("/financetracker/accounts");
 }

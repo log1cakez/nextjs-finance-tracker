@@ -346,6 +346,34 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** EOD table rows. Optional Notion page URLs are stored in `notionUrl`. */
+export const eodTrackerRows = pgTable("eod_tracker_row", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Trade / journal date (weekday + date column derive from this). */
+  tradeDate: timestamp("trade_date", { withTimezone: true }).notNull().defaultNow(),
+  session: text("session").notNull().default(""),
+  /** JSON string[] — Timeframe EOF multi-select */
+  timeframeEofJson: text("timeframe_eof_json").notNull().default("[]"),
+  /** JSON string[] — Point of Interest */
+  poiJson: text("poi_json").notNull().default("[]"),
+  trend: text("trend").notNull().default(""),
+  position: text("position").notNull().default(""),
+  riskType: text("risk_type").notNull().default(""),
+  /** JSON string[] — Result multi-select */
+  resultJson: text("result_json").notNull().default("[]"),
+  rrr: text("rrr").notNull().default(""),
+  timeRange: text("time_range").notNull().default(""),
+  entryTf: text("entry_tf").notNull().default(""),
+  remarks: text("remarks").notNull().default(""),
+  /** External Notion (or other) page URL for this journal row. */
+  notionUrl: text("notion_url").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
@@ -356,6 +384,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   accountTransfers: many(accountTransfers),
   transactions: many(transactions),
   lendings: many(lendings),
+  eodTrackerRows: many(eodTrackerRows),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -466,6 +495,10 @@ export const lendingPaymentsRelations = relations(lendingPayments, ({ one }) => 
   }),
 }));
 
+export const eodTrackerRowsRelations = relations(eodTrackerRows, ({ one }) => ({
+  user: one(users, { fields: [eodTrackerRows.userId], references: [users.id] }),
+}));
+
 export const schema = {
   users,
   accounts,
@@ -482,6 +515,7 @@ export const schema = {
   lendingPayments,
   appFxRates,
   transactions,
+  eodTrackerRows,
   usersRelations,
   accountsRelations,
   sessionsRelations,
@@ -494,4 +528,5 @@ export const schema = {
   lendingsRelations,
   lendingPaymentsRelations,
   transactionsRelations,
+  eodTrackerRowsRelations,
 };

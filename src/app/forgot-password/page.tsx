@@ -6,7 +6,7 @@ import { ForgotPasswordForm } from "@/components/forgot-password-form";
 export default async function ForgotPasswordPage() {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect("/apps");
   }
 
   return (

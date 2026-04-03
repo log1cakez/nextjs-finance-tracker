@@ -127,6 +127,34 @@
       "when": 1774711000000,
       "tag": "0017_app_fx_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1775208602772,
+      "tag": "0018_eod_notes_page",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1775210139420,
+      "tag": "0019_eod_tracker_rows",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1775210526180,
+      "tag": "0020_eod_tracker_row_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1775300000000,
+      "tag": "0021_eod_notion_url_drop_notes",
+      "breakpoints": true
     }
   ]
 }
