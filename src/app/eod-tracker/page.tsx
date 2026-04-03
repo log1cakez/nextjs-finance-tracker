@@ -178,19 +178,18 @@ export default async function EodTrackerHomePage() {
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-10 text-center text-sm text-zinc-400">
-          No EOD rows yet. Tap <strong className="text-zinc-200">Add new EOD</strong> to create your
-          first one.
+          No EOD rows yet. Use <strong className="text-zinc-200">Add new EOD</strong> above to create
+          your first one.
         </div>
       ) : (
-        <ul className="flex list-none flex-col gap-3 md:hidden">
-          {rows.map((row) => (
-            <EodMobileRowCard key={row.id} row={row} />
-          ))}
-        </ul>
-      )}
-
-      <div className="hidden min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 md:block">
-        <table className="w-full table-fixed border-collapse text-center text-xs">
+        <>
+          <ul className="flex list-none flex-col gap-3 md:hidden">
+            {rows.map((row) => (
+              <EodMobileRowCard key={row.id} row={row} />
+            ))}
+          </ul>
+          <div className="hidden min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 md:block">
+            <table className="w-full table-fixed border-collapse text-center text-xs">
           <colgroup>
             <col className="w-[10%]" />
             <col className="w-[7%]" />
@@ -228,18 +227,7 @@ export default async function EodTrackerHomePage() {
             </tr>
           </thead>
           <tbody className="text-zinc-200">
-              {rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={15}
-                    className="px-3 py-6 text-center text-zinc-400 border-b border-zinc-900"
-                  >
-                    No EOD rows yet. Click <strong>Add new EOD</strong> to create
-                    your first one.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
+              {rows.map((row) => {
                   const dt = new Date(row.tradeDate);
                   const weekday = dt.toLocaleDateString(undefined, {
                     weekday: "long",
@@ -331,11 +319,12 @@ export default async function EodTrackerHomePage() {
                       </td>
                     </tr>
                   );
-                })
-              )}
+                })}
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
   );
 }
