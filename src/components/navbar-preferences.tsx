@@ -6,21 +6,12 @@ import { setPreferredCurrency } from "@/app/actions/preferences";
 import { SUPPORTED_CURRENCIES, type FiatCurrency } from "@/lib/money";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const NO_CURRENCY_ROUTES = new Set([
-  "/login",
-  "/register",
-  "/forgot-password",
-  "/reset-password",
-]);
-
-const NO_CURRENCY_PATH_PREFIXES = ["/eod-tracker"] as const;
-
 export function NavbarPreferences({
   initialCurrency,
   showCurrency,
 }: {
   initialCurrency: FiatCurrency;
-  /** Override path-based rule (signed-in app always passes undefined to use defaults). */
+  /** When set, overrides path-based rule (default: currency only under `/financetracker`). */
   showCurrency?: boolean;
 }) {
   const pathname = usePathname();
@@ -28,10 +19,7 @@ export function NavbarPreferences({
   const [pending, startTransition] = useTransition();
   const showCurrencyPicker =
     showCurrency ??
-    (pathname == null
-      ? true
-      : !NO_CURRENCY_ROUTES.has(pathname) &&
-        !NO_CURRENCY_PATH_PREFIXES.some((p) => pathname.startsWith(p)));
+    Boolean(pathname != null && pathname.startsWith("/financetracker"));
 
   return (
     <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
