@@ -374,6 +374,28 @@ export const eodTrackerRows = pgTable("eod_tracker_row", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Cached OpenAI month summary per user (EOD AI month review). */
+export const eodAiMonthSummaries = pgTable(
+  "eod_ai_month_summary",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    yearMonth: text("year_month").notNull(),
+    summaryText: text("summary_text").notNull(),
+    tradeCount: integer("trade_count").notNull().default(0),
+    periodLabel: text("period_label").notNull().default(""),
+    /** Sorted `id:updatedAt` lines for rows in that month when the summary was saved. */
+    sourceJournalStamp: text("source_journal_stamp"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userYmUq: uniqueIndex("eod_ai_month_summary_user_ym").on(t.userId, t.yearMonth),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
@@ -385,6 +407,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(transactions),
   lendings: many(lendings),
   eodTrackerRows: many(eodTrackerRows),
+  eodAiMonthSummaries: many(eodAiMonthSummaries),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -499,6 +522,10 @@ export const eodTrackerRowsRelations = relations(eodTrackerRows, ({ one }) => ({
   user: one(users, { fields: [eodTrackerRows.userId], references: [users.id] }),
 }));
 
+export const eodAiMonthSummariesRelations = relations(eodAiMonthSummaries, ({ one }) => ({
+  user: one(users, { fields: [eodAiMonthSummaries.userId], references: [users.id] }),
+}));
+
 export const schema = {
   users,
   accounts,
@@ -516,6 +543,7 @@ export const schema = {
   appFxRates,
   transactions,
   eodTrackerRows,
+  eodAiMonthSummaries,
   usersRelations,
   accountsRelations,
   sessionsRelations,
@@ -529,4 +557,5 @@ export const schema = {
   lendingPaymentsRelations,
   transactionsRelations,
   eodTrackerRowsRelations,
+  eodAiMonthSummariesRelations,
 };

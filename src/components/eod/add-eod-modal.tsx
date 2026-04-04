@@ -119,25 +119,31 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:items-center sm:p-3"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pt-[max(0.75rem,env(safe-area-inset-top,0px))] dark:bg-black/70 sm:items-center sm:p-3"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-eod-title"
     >
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-[101] flex max-h-[min(calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)),44rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-zinc-700 bg-zinc-950 shadow-2xl sm:max-h-[min(92vh,44rem)] sm:rounded-2xl">
-        <div className="border-b border-zinc-800 px-4 py-3 text-center">
-          <h2 id="add-eod-title" className="text-sm font-semibold text-zinc-100">{mode === "edit" ? "Edit EOD" : "Add new EOD"}</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">Fill in each column. Options match your tracker presets.</p>
+      <div className="relative z-[101] flex max-h-[min(calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)),44rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-950 sm:max-h-[min(92vh,44rem)] sm:rounded-2xl">
+        <div className="border-b border-zinc-200 px-4 py-3 text-center dark:border-zinc-800">
+          <h2 id="add-eod-title" className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {mode === "edit" ? "Edit EOD" : "Add new EOD"}
+          </h2>
+          <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-500">
+            Fill in each column. Options match your tracker presets.
+          </p>
         </div>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 text-center">
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Date</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Date
+            </span>
             <input
               type="date"
               value={tradeDate}
               onChange={(e) => setTradeDate(e.target.value)}
-              className="eod-modal-date min-h-11 w-full touch-manipulation rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+              className="eod-modal-date min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
           </label>
           <SingleTagPicker label="Session" fieldKey="session" options={EOD_SESSION_OPTIONS} value={session} onChange={setSession} />
@@ -149,19 +155,21 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
           <MultiTagPicker label="Result" fieldKey="result" options={EOD_RESULT_OPTIONS} values={result} onChange={setResult} />
           <SingleTagPicker label="RRR" fieldKey="rrr" options={EOD_RRR_OPTIONS} value={rrr} onChange={setRrr} />
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Time</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Time
+            </span>
             <div className="flex items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={() => setTimeFormat("12h")}
-                className={`min-h-10 min-w-[3rem] touch-manipulation rounded-md px-3 py-2 text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${timeFormat === "12h" ? "bg-amber-500 text-amber-950" : "bg-zinc-800 text-zinc-300"}`}
+                className={`min-h-10 min-w-[3rem] touch-manipulation rounded-md px-3 py-2 text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${timeFormat === "12h" ? "bg-amber-500 text-amber-950" : "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"}`}
               >
                 12h
               </button>
               <button
                 type="button"
                 onClick={() => setTimeFormat("24h")}
-                className={`min-h-10 min-w-[3rem] touch-manipulation rounded-md px-3 py-2 text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${timeFormat === "24h" ? "bg-amber-500 text-amber-950" : "bg-zinc-800 text-zinc-300"}`}
+                className={`min-h-10 min-w-[3rem] touch-manipulation rounded-md px-3 py-2 text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${timeFormat === "24h" ? "bg-amber-500 text-amber-950" : "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"}`}
               >
                 24h
               </button>
@@ -177,15 +185,18 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
                     else setEndTime(cv);
                   };
                   return (
-                    <div key={slot} className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-center">
-                      <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+                    <div
+                      key={slot}
+                      className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-center dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
                         {slot === "start" ? "Start (24h)" : "End (24h)"}
                       </p>
                       <div className="mx-auto grid max-w-[12rem] grid-cols-2 gap-1">
                         <select
                           value={hh}
                           onChange={(e) => setParts(e.target.value, mm)}
-                          className="min-h-10 touch-manipulation rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-center text-xs text-zinc-100 sm:min-h-0"
+                          className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                           aria-label={slot === "start" ? "Start hour (24h)" : "End hour (24h)"}
                         >
                           {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map((h) => (
@@ -197,7 +208,7 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
                         <select
                           value={MINUTES_24H.includes(mm) ? mm : "00"}
                           onChange={(e) => setParts(hh, e.target.value)}
-                          className="min-h-10 touch-manipulation rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-center text-xs text-zinc-100 sm:min-h-0"
+                          className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                           aria-label={slot === "start" ? "Start minutes" : "End minutes"}
                         >
                           {MINUTES_24H.map((m) => (
@@ -221,12 +232,47 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
                     if (slot === "start") setStartTime(cv); else setEndTime(cv);
                   };
                   return (
-                    <div key={slot} className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-center">
-                      <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">{slot === "start" ? "Start" : "End"}</p>
+                    <div
+                      key={slot}
+                      className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-center dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+                        {slot === "start" ? "Start" : "End"}
+                      </p>
                       <div className="grid grid-cols-3 gap-1">
-                        <select value={p.hh} onChange={(e) => setV({ hh: e.target.value })} className="min-h-10 touch-manipulation rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-center text-xs text-zinc-100 sm:min-h-0">{Array.from({ length: 12 }).map((_, i) => { const h = String(i + 1).padStart(2, "0"); return <option key={h} value={h}>{h}</option>; })}</select>
-                        <select value={p.mm} onChange={(e) => setV({ mm: e.target.value })} className="min-h-10 touch-manipulation rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-center text-xs text-zinc-100 sm:min-h-0">{MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
-                        <select value={p.period} onChange={(e) => setV({ period: e.target.value as "AM" | "PM" })} className="min-h-10 touch-manipulation rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-center text-xs text-zinc-100 sm:min-h-0"><option value="AM">AM</option><option value="PM">PM</option></select>
+                        <select
+                          value={p.hh}
+                          onChange={(e) => setV({ hh: e.target.value })}
+                          className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        >
+                          {Array.from({ length: 12 }).map((_, i) => {
+                            const h = String(i + 1).padStart(2, "0");
+                            return (
+                              <option key={h} value={h}>
+                                {h}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <select
+                          value={p.mm}
+                          onChange={(e) => setV({ mm: e.target.value })}
+                          className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        >
+                          {MINUTE_OPTIONS.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={p.period}
+                          onChange={(e) => setV({ period: e.target.value as "AM" | "PM" })}
+                          className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
                       </div>
                     </div>
                   );
@@ -236,27 +282,38 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
           </label>
           <SingleTagPicker label="Entry TF" fieldKey="entryTf" options={EOD_ENTRY_TF_OPTIONS} value={entryTf} onChange={setEntryTf} />
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Remarks</span>
-            <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} className="min-h-[5.5rem] w-full touch-manipulation resize-y rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm text-zinc-100" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Remarks
+            </span>
+            <textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={3}
+              className="min-h-[5.5rem] w-full touch-manipulation resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-center text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            />
           </label>
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Notion link</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Notion link
+            </span>
             <input
               type="url"
               inputMode="url"
               placeholder="https://www.notion.so/..."
               value={notionUrl}
               onChange={(e) => setNotionUrl(e.target.value)}
-              className="min-h-11 w-full touch-manipulation rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm text-zinc-100 placeholder:text-zinc-600"
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-center text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
             />
-            <span className="block text-[11px] text-zinc-600">Optional. Opens in a new tab from the EOD table.</span>
+            <span className="block text-[11px] text-zinc-600 dark:text-zinc-500">
+              Optional. Opens in a new tab from the EOD table.
+            </span>
           </label>
         </div>
-        <div className="flex justify-stretch gap-2 border-t border-zinc-800 px-4 py-3 sm:justify-center">
+        <div className="flex justify-stretch gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:justify-center">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 flex-1 touch-manipulation rounded-lg px-3 py-2.5 text-xs font-medium text-zinc-400 hover:bg-zinc-800 sm:min-h-0 sm:flex-none sm:py-2"
+            className="min-h-11 flex-1 touch-manipulation rounded-lg px-3 py-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 sm:min-h-0 sm:flex-none sm:py-2 dark:text-zinc-400 dark:hover:bg-zinc-800"
           >
             Cancel
           </button>

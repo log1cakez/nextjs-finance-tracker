@@ -1,0 +1,18 @@
+function normalizeMode(raw: string | undefined | null): "dev" | "prod" {
+  const t = raw?.trim().toLowerCase();
+  return t === "dev" ? "dev" : "prod";
+}
+
+/** From `MIDAS_RUNTIME_MODE`. Defaults to prod when unset. */
+export function getEnvRuntimeMode(): "dev" | "prod" {
+  return normalizeMode(process.env.MIDAS_RUNTIME_MODE);
+}
+
+export function isEnvDevRuntime(): boolean {
+  return getEnvRuntimeMode() === "dev";
+}
+
+/** Server has an OpenAI key (EOD AI month review). */
+export function isOpenAiConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}

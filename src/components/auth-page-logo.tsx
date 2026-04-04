@@ -27,7 +27,7 @@ export function AuthPageLogo() {
         unoptimized
       />
       <span className="text-2xl font-semibold tracking-tight text-zinc-800 sm:text-3xl dark:text-zinc-100">
-        Finance Capital
+        MIDAS Capital
       </span>
     </div>
   );

@@ -22,7 +22,7 @@ export function EodRowManageActions({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 min-w-[2.75rem] touch-manipulation items-center justify-center rounded border border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-200 hover:bg-zinc-800 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs"
+        className="inline-flex min-h-9 min-w-[2.75rem] touch-manipulation items-center justify-center rounded border border-zinc-300 px-2 py-1.5 text-[10px] text-zinc-800 hover:bg-zinc-100 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         Edit
       </button>
@@ -40,7 +40,7 @@ export function EodRowManageActions({
             window.location.reload();
           });
         }}
-        className="inline-flex min-h-9 min-w-[2.75rem] touch-manipulation items-center justify-center rounded border border-red-900/60 px-2 py-1.5 text-[10px] text-red-300 hover:bg-red-950/40 disabled:opacity-50 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs"
+        className="inline-flex min-h-9 min-w-[2.75rem] touch-manipulation items-center justify-center rounded border border-red-300 px-2 py-1.5 text-[10px] text-red-700 hover:bg-red-50 disabled:opacity-50 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
       >
         Delete
       </button>

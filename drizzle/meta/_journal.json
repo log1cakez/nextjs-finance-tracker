@@ -155,6 +155,34 @@
       "when": 1775300000000,
       "tag": "0021_eod_notion_url_drop_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1775400000000,
+      "tag": "0022_app_instance",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1775500000000,
+      "tag": "0023_drop_app_instance",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775600000000,
+      "tag": "0024_eod_ai_month_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1775700000000,
+      "tag": "0025_eod_ai_summary_journal_stamp",
+      "breakpoints": true
     }
   ]
 }

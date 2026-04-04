@@ -182,23 +182,35 @@ export function getEodOptionTone(field: string, value: string): EodPillTone {
 }
 
 const toneClass: Record<EodPillTone, string> = {
-  blue: "bg-blue-600/30 text-blue-100 border-blue-500/45",
-  purple: "bg-purple-600/30 text-purple-100 border-purple-500/45",
-  violet: "bg-violet-600/30 text-violet-100 border-violet-500/45",
-  amber: "bg-amber-600/30 text-amber-100 border-amber-500/45",
-  brown: "bg-amber-900/40 text-amber-50 border-amber-700/50",
-  red: "bg-red-600/30 text-red-100 border-red-500/45",
-  green: "bg-emerald-600/30 text-emerald-100 border-emerald-500/45",
-  grey: "bg-zinc-600/30 text-zinc-100 border-zinc-500/45",
-  slate: "bg-slate-600/35 text-slate-100 border-slate-500/45",
-  pink: "bg-pink-700/35 text-pink-50 border-pink-600/45",
-  cyan: "bg-cyan-600/30 text-cyan-50 border-cyan-500/45",
-  emerald: "bg-emerald-800/40 text-emerald-50 border-emerald-700/45",
+  blue:
+    "bg-blue-500/15 text-blue-900 border-blue-500/35 dark:bg-blue-600/30 dark:text-blue-100 dark:border-blue-500/45",
+  purple:
+    "bg-purple-500/15 text-purple-900 border-purple-500/35 dark:bg-purple-600/30 dark:text-purple-100 dark:border-purple-500/45",
+  violet:
+    "bg-violet-500/15 text-violet-900 border-violet-500/35 dark:bg-violet-600/30 dark:text-violet-100 dark:border-violet-500/45",
+  amber:
+    "bg-amber-500/20 text-amber-950 border-amber-500/40 dark:bg-amber-600/30 dark:text-amber-100 dark:border-amber-500/45",
+  brown:
+    "bg-amber-200/80 text-amber-950 border-amber-600/40 dark:bg-amber-900/40 dark:text-amber-50 dark:border-amber-700/50",
+  red: "bg-red-500/15 text-red-900 border-red-500/35 dark:bg-red-600/30 dark:text-red-100 dark:border-red-500/45",
+  green:
+    "bg-emerald-500/15 text-emerald-900 border-emerald-600/35 dark:bg-emerald-600/30 dark:text-emerald-100 dark:border-emerald-500/45",
+  grey:
+    "bg-zinc-200/90 text-zinc-900 border-zinc-400/50 dark:bg-zinc-600/30 dark:text-zinc-100 dark:border-zinc-500/45",
+  slate:
+    "bg-slate-200/90 text-slate-900 border-slate-400/50 dark:bg-slate-600/35 dark:text-slate-100 dark:border-slate-500/45",
+  pink:
+    "bg-pink-200/80 text-pink-950 border-pink-500/40 dark:bg-pink-700/35 dark:text-pink-50 dark:border-pink-600/45",
+  cyan:
+    "bg-cyan-500/15 text-cyan-900 border-cyan-500/40 dark:bg-cyan-600/30 dark:text-cyan-50 dark:border-cyan-500/45",
+  emerald:
+    "bg-emerald-200/80 text-emerald-950 border-emerald-600/40 dark:bg-emerald-800/40 dark:text-emerald-50 dark:border-emerald-700/45",
 };
 
 export function eodPillClass(tone: EodPillTone, opts?: { wrap?: boolean }): string {
+  /** `wrap` allows multi-line pill text (rare). Default keeps one line so table cells never stack letters vertically. */
   const layout = opts?.wrap
     ? "inline-block max-w-full whitespace-normal break-words align-top"
-    : "inline-flex";
+    : "inline-flex max-w-max items-center justify-center whitespace-nowrap";
   return `${layout} rounded border px-2 py-0.5 ${toneClass[tone]}`;
 }

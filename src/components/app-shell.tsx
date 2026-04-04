@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
+import { EodSectionNav } from "@/components/eod/eod-section-nav";
 import { FloatingNavBar } from "@/components/floating-nav-bar";
 import { NavbarPreferences } from "@/components/navbar-preferences";
 import { SiteFooter } from "@/components/site-footer";
@@ -35,6 +36,9 @@ export function AppShell({
   const wideContent = pathname?.startsWith("/eod-tracker") ?? false;
   const financetrackerNavPad =
     Boolean(user) && (pathname?.startsWith("/financetracker") ?? false);
+  const eodFloatingNavPad =
+    Boolean(user) && (pathname?.startsWith("/eod-tracker") ?? false);
+  const bottomFloatingNavPad = financetrackerNavPad || eodFloatingNavPad;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -92,7 +96,7 @@ export function AppShell({
       )}
       <main
         className={`mx-auto flex w-full min-w-0 flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 ${wideContent ? "max-w-none" : "max-w-5xl"} ${hideHeader ? "pt-10 sm:pt-12" : ""} ${
-          financetrackerNavPad
+          bottomFloatingNavPad
             ? "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
             : "pb-[env(safe-area-inset-bottom,0px)]"
         }`}
@@ -103,6 +107,7 @@ export function AppShell({
       {user && pathname?.startsWith("/financetracker") ? (
         <FloatingNavBar items={mainNav} />
       ) : null}
+      {user && pathname?.startsWith("/eod-tracker") ? <EodSectionNav /> : null}
     </div>
   );
 }

@@ -13,6 +13,8 @@ const NO_CURRENCY_ROUTES = new Set([
   "/reset-password",
 ]);
 
+const NO_CURRENCY_PATH_PREFIXES = ["/eod-tracker"] as const;
+
 export function NavbarPreferences({
   initialCurrency,
   showCurrency,
@@ -25,7 +27,11 @@ export function NavbarPreferences({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const showCurrencyPicker =
-    showCurrency ?? !NO_CURRENCY_ROUTES.has(pathname);
+    showCurrency ??
+    (pathname == null
+      ? true
+      : !NO_CURRENCY_ROUTES.has(pathname) &&
+        !NO_CURRENCY_PATH_PREFIXES.some((p) => pathname.startsWith(p)));
 
   return (
     <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">

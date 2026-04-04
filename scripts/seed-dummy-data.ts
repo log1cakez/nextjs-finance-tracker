@@ -1,6 +1,6 @@
 /**
- * Insert sample categories, accounts, transactions, recurring templates, loans, and (optionally) a transfer
- * for local / staging testing. Requires an existing user (sign up first).
+ * Insert sample categories, accounts, transactions, recurring templates, loans, EOD journal rows,
+ * and (optionally) a transfer for local / staging testing. Requires an existing user (sign up first).
  *
  * Usage:
  *   SEED_USER_EMAIL=you@example.com npm run db:seed
@@ -10,12 +10,13 @@
  * Transfer row uses encrypted payload like production; skipped if TRANSACTIONS_ENCRYPTION_KEY is unset.
  */
 import { config } from "dotenv";
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, like, type InferInsertModel } from "drizzle-orm";
 import { getDb } from "../src/db/index";
 import {
   accountTransfers,
   categories,
   categoryDefinitions,
+  eodTrackerRows,
   financialAccounts,
   lendingPayments,
   lendings,
@@ -91,6 +92,351 @@ function daysAgo(n: number): Date {
   return noon(d);
 }
 
+const EOD_SEED_MARKER = "[seed-eod]";
+
+type EodSeedSpec = {
+  daysAgo: number;
+  session: string;
+  timeframeEof: string[];
+  poi: string[];
+  trend: string;
+  position: string;
+  riskType: string;
+  result: string[];
+  rrr: string;
+  timeRange: string;
+  entryTf: string;
+  remarks: string;
+  notionUrl?: string;
+};
+
+function buildEodSeedRows(userId: string): InferInsertModel<typeof eodTrackerRows>[] {
+  const specs: EodSeedSpec[] = [
+    {
+      daysAgo: 1,
+      session: "New York",
+      timeframeEof: ["M15 Bullish", "4H Bullish"],
+      poi: ["LQ", "IDM"],
+      trend: "Continuation",
+      position: "Long",
+      riskType: "Least agg.",
+      result: ["Win"],
+      rrr: "+20",
+      timeRange: "09:30-11:15",
+      entryTf: "5m",
+      remarks: `Clean continuation after London sweep. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 2,
+      session: "London",
+      timeframeEof: ["M15 Bearish"],
+      poi: ["Swept Session LQ"],
+      trend: "Reversal",
+      position: "Short",
+      riskType: "Aggressive",
+      result: ["Loss", "Data"],
+      rrr: "below 10",
+      timeRange: "08:00-09:30",
+      entryTf: "15m",
+      remarks: `Stopped early; note liquidity grab. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 4,
+      session: "Asia",
+      timeframeEof: ["Daily Bullish"],
+      poi: ["Extreme"],
+      trend: "Pro",
+      position: "Long",
+      riskType: "Risk Entry",
+      result: ["Break Even"],
+      rrr: "+10",
+      timeRange: "01:00-03:00",
+      entryTf: "1H",
+      remarks: `Chop after news; flat. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 5,
+      session: "Pre-NY",
+      timeframeEof: ["M15 Wedge"],
+      poi: ["Flip"],
+      trend: "Wedge",
+      position: "Short",
+      riskType: "Least agg.",
+      result: ["Win", "EOD"],
+      rrr: "+30",
+      timeRange: "13:00-14:30",
+      entryTf: "15m",
+      remarks: `Wedge resolution matched plan. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 7,
+      session: "New York",
+      timeframeEof: ["4H Bearish"],
+      poi: ["Chain"],
+      trend: "Counter",
+      position: "Short",
+      riskType: "Aggressive",
+      result: ["Win"],
+      rrr: "+40",
+      timeRange: "10:00-12:00",
+      entryTf: "5m",
+      remarks: `Counter-trend scalp; size reduced. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 9,
+      session: "London lull",
+      timeframeEof: ["M15 Bearish", "Daily Bearish"],
+      poi: ["LQ"],
+      trend: "Continuation",
+      position: "Short",
+      riskType: "Least agg.",
+      result: ["Data"],
+      rrr: "below 10",
+      timeRange: "07:30-09:00",
+      entryTf: "30m",
+      remarks: `No execution; observation only. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 11,
+      session: "Frankfurt",
+      timeframeEof: ["M15 Bullish"],
+      poi: ["Sweepless Flip"],
+      trend: "Scale-In",
+      position: "Long",
+      riskType: "Risk Entry",
+      result: ["Front Run"],
+      rrr: "+10",
+      timeRange: "04:00-05:30",
+      entryTf: "5m",
+      remarks: `Front-run before target; journal for review. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 14,
+      session: "New York",
+      timeframeEof: ["M15 Wedge"],
+      poi: ["IDM", "LQ"],
+      trend: "Wedge",
+      position: "Long",
+      riskType: "Least agg.",
+      result: ["Loss"],
+      rrr: "below 10",
+      timeRange: "15:00-16:00",
+      entryTf: "1m",
+      remarks: `Late-day fakeout; wrong context. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 16,
+      session: "London",
+      timeframeEof: ["4H Bullish"],
+      poi: ["LQ"],
+      trend: "Continuation",
+      position: "Long",
+      riskType: "Aggressive",
+      result: ["Win"],
+      rrr: "above 50",
+      timeRange: "09:00-11:30",
+      entryTf: "15m",
+      remarks: `Strong trend day; trailed runner. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 19,
+      session: "Asia",
+      timeframeEof: ["Daily Bearish"],
+      poi: ["Extreme", "Chain"],
+      trend: "Reversal",
+      position: "Short",
+      riskType: "Least agg.",
+      result: ["Break Even", "Data"],
+      rrr: "+20",
+      timeRange: "22:00-23:30",
+      entryTf: "4H",
+      remarks: `Reversal setup fizzled. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 22,
+      session: "Pre-NY",
+      timeframeEof: ["M15 Bearish"],
+      poi: ["Swept Session LQ"],
+      trend: "Pro",
+      position: "Short",
+      riskType: "Risk Entry",
+      result: ["Win"],
+      rrr: "+30",
+      timeRange: "14:00-15:45",
+      entryTf: "5m",
+      remarks: `Pre-NY sweep play. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 25,
+      session: "New York",
+      timeframeEof: ["M15 Bullish", "M15 Wedge"],
+      poi: ["Flip", "LQ"],
+      trend: "Counter",
+      position: "Long",
+      riskType: "Aggressive",
+      result: ["EOD", "Data"],
+      rrr: "+10",
+      timeRange: "10:30-11:00",
+      entryTf: "5m",
+      remarks: `End of day management only. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 28,
+      session: "London",
+      timeframeEof: ["4H Bearish", "Daily Bearish"],
+      poi: ["LQ"],
+      trend: "Continuation",
+      position: "Short",
+      riskType: "Least agg.",
+      result: ["Win"],
+      rrr: "+20",
+      timeRange: "08:30-10:00",
+      entryTf: "15m",
+      remarks: `Aligned with higher-TF bias. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 35,
+      session: "New York",
+      timeframeEof: ["M15 Bullish"],
+      poi: ["IDM"],
+      trend: "Continuation",
+      position: "Long",
+      riskType: "Least agg.",
+      result: ["Loss", "EOD"],
+      rrr: "below 10",
+      timeRange: "13:30-14:00",
+      entryTf: "1m",
+      remarks: `Overtraded lunch chop. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 42,
+      session: "Asia",
+      timeframeEof: ["M15 Bearish"],
+      poi: ["Extreme"],
+      trend: "Wedge",
+      position: "Short",
+      riskType: "Risk Entry",
+      result: ["Win"],
+      rrr: "+40",
+      timeRange: "00:30-02:00",
+      entryTf: "5m",
+      remarks: `Asia range fade. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 50,
+      session: "London",
+      timeframeEof: ["Daily Bullish"],
+      poi: ["Chain"],
+      trend: "Scale-In",
+      position: "Long",
+      riskType: "Aggressive",
+      result: ["Break Even"],
+      rrr: "+10",
+      timeRange: "07:00-09:30",
+      entryTf: "30m",
+      remarks: `Scaled in; scratched at BE. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 58,
+      session: "Pre-NY",
+      timeframeEof: ["M15 Wedge"],
+      poi: ["LQ", "Flip"],
+      trend: "Reversal",
+      position: "Long",
+      riskType: "Least agg.",
+      result: ["Data"],
+      rrr: "below 10",
+      timeRange: "12:00-13:00",
+      entryTf: "15m",
+      remarks: `Paper only — structure practice. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 67,
+      session: "New York",
+      timeframeEof: ["4H Bullish", "Daily Bullish"],
+      poi: ["Swept Session LQ"],
+      trend: "Pro",
+      position: "Long",
+      riskType: "Least agg.",
+      result: ["Win"],
+      rrr: "+30",
+      timeRange: "09:45-11:00",
+      entryTf: "5m",
+      remarks: `HTF alignment + session open. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 75,
+      session: "Frankfurt",
+      timeframeEof: ["M15 Bearish"],
+      poi: ["LQ"],
+      trend: "Continuation",
+      position: "Short",
+      riskType: "Least agg.",
+      result: ["Win", "Data"],
+      rrr: "+20",
+      timeRange: "03:30-05:00",
+      entryTf: "15m",
+      remarks: `European morning trend. ${EOD_SEED_MARKER}`,
+    },
+    {
+      daysAgo: 88,
+      session: "London lull",
+      timeframeEof: ["M15 Bullish"],
+      poi: ["IDM"],
+      trend: "Counter",
+      position: "Long",
+      riskType: "Risk Entry",
+      result: ["Loss"],
+      rrr: "below 10",
+      timeRange: "06:00-07:30",
+      entryTf: "5m",
+      remarks: `Low volume trap. ${EOD_SEED_MARKER}`,
+    },
+  ];
+
+  return specs.map((s) => ({
+    userId,
+    tradeDate: daysAgo(s.daysAgo),
+    session: s.session,
+    timeframeEofJson: JSON.stringify(s.timeframeEof),
+    poiJson: JSON.stringify(s.poi),
+    trend: s.trend,
+    position: s.position,
+    riskType: s.riskType,
+    resultJson: JSON.stringify(s.result),
+    rrr: s.rrr,
+    timeRange: s.timeRange,
+    entryTf: s.entryTf,
+    remarks: s.remarks,
+    notionUrl: s.notionUrl ?? "",
+  }));
+}
+
+async function seedEodTrackerRows(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  force: boolean,
+): Promise<void> {
+  if (!force) {
+    const existingMarker = await db.query.eodTrackerRows.findFirst({
+      where: and(
+        eq(eodTrackerRows.userId, userId),
+        like(eodTrackerRows.remarks, `%${EOD_SEED_MARKER}%`),
+      ),
+    });
+    if (existingMarker) {
+      console.log(
+        `EOD seed rows already present (remarks contain "${EOD_SEED_MARKER}"). Set SEED_FORCE=1 to insert another batch.`,
+      );
+      return;
+    }
+  }
+
+  const rows = buildEodSeedRows(userId);
+  await db.insert(eodTrackerRows).values(rows);
+  console.log(`Inserted ${rows.length} EOD tracker rows (${EOD_SEED_MARKER}).`);
+}
+
 async function main() {
   const email = process.env.SEED_USER_EMAIL?.trim().toLowerCase();
   if (!email) {
@@ -124,6 +470,7 @@ async function main() {
       console.log(
         `Seed data already present (account matching "${SEED_TAG}"). Set SEED_FORCE=1 to insert again.`,
       );
+      await seedEodTrackerRows(db, userId, force);
       return;
     }
   }
@@ -577,8 +924,10 @@ async function main() {
     );
   }
 
+  await seedEodTrackerRows(db, userId, force);
+
   console.log(
-    `Done. Seeded user ${email}: ${catRows.length} categories, 3 accounts, ${txValues.length} transactions, 4 recurring templates, 2 loans (receivable + payable with one payment).`,
+    `Done. Seeded user ${email}: ${catRows.length} categories, 3 accounts, ${txValues.length} transactions, 4 recurring templates, 2 loans (receivable + payable with one payment), plus EOD journal rows (see remarks ${EOD_SEED_MARKER}).`,
   );
 }
 
