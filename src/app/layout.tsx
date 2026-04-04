@@ -73,7 +73,7 @@ export default async function RootLayout({
         <ExtensionAttrCleanup />
         <ThemeProvider>
           <CenterToastProvider>
-            <div className="midas-page-bg flex min-h-full flex-col bg-zinc-50 dark:bg-zinc-950">
+            <div className="midas-page-bg flex min-h-dvh flex-col bg-zinc-50 dark:bg-zinc-950">
               <AppShell user={user} preferredCurrency={preferredCurrency}>
                 {children}
               </AppShell>

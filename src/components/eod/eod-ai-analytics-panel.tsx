@@ -1,12 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP } from "@/lib/eod-ai-prod-quota";
+import {
+  EOD_AI_MIN_MONTH_ENTRIES,
+  EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP,
+} from "@/lib/eod-ai-prod-quota";
+
+/** Fixed locale so SSR and browser produce identical strings (avoids hydration mismatch). */
+const EOD_DISPLAY_LOCALE = "en-US";
 
 function formatYearMonthHeading(ym: string): string {
   if (!/^\d{4}-\d{2}$/.test(ym)) return ym;
   const [y, m] = ym.split("-").map(Number);
-  return new Date(y!, m! - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return new Date(y!, m! - 1, 1).toLocaleDateString(EOD_DISPLAY_LOCALE, {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function renderAiMarkdownLight(text: string): ReactNode {
@@ -45,6 +54,7 @@ export function EodAiAnalyticsPanel({
   journalDataStamp,
   openAiConfigured,
   summarizeUnrestricted,
+  journalEntryCountForMonth,
 }: {
   /** Calendar month `YYYY-MM` (from journal month picker). */
   month: string;
@@ -53,6 +63,8 @@ export function EodAiAnalyticsPanel({
   openAiConfigured: boolean;
   /** When true (MIDAS_RUNTIME_MODE=dev), summarize is allowed any day. */
   summarizeUnrestricted: boolean;
+  /** Count of EOD rows in `month` (same filter as the journal table). */
+  journalEntryCountForMonth: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
@@ -66,6 +78,8 @@ export function EodAiAnalyticsPanel({
   const [summarizeRunCount, setSummarizeRunCount] = useState(0);
 
   const canSubmit = useMemo(() => /^\d{4}-\d{2}$/.test(month), [month]);
+
+  const meetsMinJournalEntries = journalEntryCountForMonth >= EOD_AI_MIN_MONTH_ENTRIES;
 
   /** Production: hit 3 saved runs for this journal snapshot (same month + stamp). */
   const prodQuotaExhausted = useMemo(() => {
@@ -81,11 +95,18 @@ export function EodAiAnalyticsPanel({
   ]);
 
   const canClickSummarize = useMemo(() => {
-    if (!openAiConfigured || !canSubmit || loading) return false;
+    if (!openAiConfigured || !canSubmit || loading || !meetsMinJournalEntries) return false;
     if (summarizeUnrestricted) return true;
     if (prodQuotaExhausted) return false;
     return true;
-  }, [openAiConfigured, canSubmit, loading, summarizeUnrestricted, prodQuotaExhausted]);
+  }, [
+    openAiConfigured,
+    canSubmit,
+    loading,
+    meetsMinJournalEntries,
+    summarizeUnrestricted,
+    prodQuotaExhausted,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,9 +231,11 @@ export function EodAiAnalyticsPanel({
 
   const summarizeTitle = !openAiConfigured
     ? "Configure OPENAI_API_KEY on the server"
-    : !summarizeUnrestricted && prodQuotaExhausted
-      ? `Production allows up to ${EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP} summaries while this month's journal rows are unchanged. Edit the table to run again.`
-      : undefined;
+    : !meetsMinJournalEntries
+      ? `Need at least ${EOD_AI_MIN_MONTH_ENTRIES} journal entries for this month (${journalEntryCountForMonth} logged).`
+      : !summarizeUnrestricted && prodQuotaExhausted
+        ? `Production allows up to ${EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP} summaries while this month's journal rows are unchanged. Edit the table to run again.`
+        : undefined;
 
   return (
     <section
@@ -231,9 +254,7 @@ export function EodAiAnalyticsPanel({
             {formatYearMonthHeading(month)}
           </p>
           <p className="mt-1 max-w-xl text-xs text-zinc-600 dark:text-zinc-500">
-            Summarizes how your logged sessions look for the journal month you selected above—patterns,
-            strengths, and one focus for next month. Uses your EOD fields only (not live market data).
-            Saved summaries are kept per month.
+            {`Summarizes how your logged sessions look for the journal month you selected above—patterns, strengths, and one focus for next month. Requires at least ${EOD_AI_MIN_MONTH_ENTRIES} EOD entries in that month. Uses your EOD fields only (not live market data). Saved summaries are kept per month.`}
           </p>
           {!openAiConfigured ? (
             <p className="mt-2 max-w-xl text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-500">
@@ -243,6 +264,16 @@ export function EodAiAnalyticsPanel({
               </code>{" "}
               on the server to generate summaries. You can still open past months to read anything
               already saved.
+            </p>
+          ) : null}
+          {openAiConfigured && canSubmit && !meetsMinJournalEntries ? (
+            <p className="mt-2 max-w-xl text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-500">
+              Summarizing needs at least {EOD_AI_MIN_MONTH_ENTRIES} EOD entries in{" "}
+              <span className="font-medium text-zinc-800 dark:text-zinc-300">
+                {formatYearMonthHeading(month)}
+              </span>
+              . You have {journalEntryCountForMonth}. Add more rows for this month or choose a month with
+              enough entries.
             </p>
           ) : null}
         </div>
@@ -289,7 +320,7 @@ export function EodAiAnalyticsPanel({
             <>
               {" "}
               · saved{" "}
-              {new Date(savedAt).toLocaleString(undefined, {
+              {new Date(savedAt).toLocaleString(EOD_DISPLAY_LOCALE, {
                 dateStyle: "medium",
                 timeStyle: "short",
               })}

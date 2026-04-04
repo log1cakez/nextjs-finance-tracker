@@ -41,7 +41,7 @@ export function AppShell({
   const bottomFloatingNavPad = financetrackerNavPad || eodFloatingNavPad;
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {hideHeader ? (
         <div
           className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex max-w-[calc(100vw-1.5rem)] flex-row flex-wrap items-center justify-end gap-2 sm:right-4 sm:top-4 sm:max-w-none sm:gap-3"
@@ -101,7 +101,7 @@ export function AppShell({
         </header>
       )}
       <main
-        className={`mx-auto flex w-full min-w-0 flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 ${wideContent ? "max-w-none" : "max-w-5xl"} ${hideHeader ? "pt-10 sm:pt-12" : ""} ${
+        className={`mx-auto flex w-full min-h-0 min-w-0 flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 ${wideContent ? "max-w-none" : "max-w-5xl"} ${hideHeader ? "pt-10 sm:pt-12" : ""} ${
           bottomFloatingNavPad
             ? "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
             : "pb-[env(safe-area-inset-bottom,0px)]"

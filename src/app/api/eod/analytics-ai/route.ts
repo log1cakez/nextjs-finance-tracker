@@ -1,7 +1,10 @@
 import { auth } from "@/auth";
 import { getEodTrackerRowsForExcel } from "@/app/actions/eod-tracker-rows";
 import { isEnvDevRuntime } from "@/lib/app-runtime-mode";
-import { EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP } from "@/lib/eod-ai-prod-quota";
+import {
+  EOD_AI_MIN_MONTH_ENTRIES,
+  EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP,
+} from "@/lib/eod-ai-prod-quota";
 import { buildEodAnalyticsPayload, eodRowsForCalendarMonth } from "@/lib/eod-analytics-summary";
 import {
   getEodAiMonthSummaryForUser,
@@ -69,6 +72,15 @@ export async function POST(req: Request) {
   const allRows = await getEodTrackerRowsForExcel(userId);
   const monthRows = eodRowsForCalendarMonth(allRows, year, month);
   const journalDataStamp = eodMonthJournalDataStamp(allRows, yearMonth);
+
+  if (monthRows.length < EOD_AI_MIN_MONTH_ENTRIES) {
+    return Response.json(
+      {
+        error: `AI summary needs at least ${EOD_AI_MIN_MONTH_ENTRIES} journal entries for this month. You have ${monthRows.length}.`,
+      },
+      { status: 400 },
+    );
+  }
 
   if (!isEnvDevRuntime()) {
     const existing = await getEodAiMonthSummaryForUser(userId, yearMonth);

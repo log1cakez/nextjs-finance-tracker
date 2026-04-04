@@ -12,6 +12,9 @@ import { eodMonthJournalDataStamp } from "@/lib/eod-journal-month-stamp";
 import type { EodPillTone } from "@/lib/eod-tracker-options";
 import { eodPillClass, getEodOptionTone } from "@/lib/eod-tracker-options";
 
+/** Fixed locale so SSR and client match (avoids hydration mismatch on dates). */
+const EOD_DISPLAY_LOCALE = "en-US";
+
 function currentYearMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -175,8 +178,8 @@ function FieldLine({ label, children }: { label: string; children: ReactNode }) 
 
 function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
   const dt = new Date(row.tradeDate);
-  const weekday = dt.toLocaleDateString(undefined, { weekday: "long" });
-  const dateLabel = dt.toLocaleDateString(undefined, {
+  const weekday = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, { weekday: "long" });
+  const dateLabel = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -327,7 +330,7 @@ function monthLabel(ym: string): string {
   if (!/^\d{4}-\d{2}$/.test(ym)) return ym;
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(y!, m! - 1, 1);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(EOD_DISPLAY_LOCALE, { month: "long", year: "numeric" });
 }
 
 export function EodTrackerView({
@@ -478,10 +481,10 @@ export function EodTrackerView({
                     <tbody className="text-zinc-800 dark:text-zinc-200">
                       {displayRows.map((row) => {
                         const dt = new Date(row.tradeDate);
-                        const weekday = dt.toLocaleDateString(undefined, {
+                        const weekday = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, {
                           weekday: "long",
                         });
-                        const dateLabel = dt.toLocaleDateString(undefined, {
+                        const dateLabel = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
@@ -588,6 +591,7 @@ export function EodTrackerView({
           journalDataStamp={journalDataStamp}
           openAiConfigured={openAiConfigured}
           summarizeUnrestricted={summarizeUnrestricted}
+          journalEntryCountForMonth={filteredRows.length}
         />
       </section>
 

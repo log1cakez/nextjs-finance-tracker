@@ -34,9 +34,21 @@ function isMissingRowsTable(error: unknown): boolean {
 }
 
 function isMissingUserForeignKey(error: unknown): boolean {
+  const msg = errorText(error).toLowerCase();
   const e = error as { cause?: { code?: string; detail?: string } };
-  const detail = e?.cause?.detail ?? "";
-  return e?.cause?.code === "23503" && detail.includes('table "user"');
+  const code = e?.cause?.code;
+  const detail = (e?.cause?.detail ?? "").toLowerCase();
+  if (code === "23503") {
+    return (
+      detail.includes("user") ||
+      detail.includes("user_id") ||
+      msg.includes("eod_tracker_row_user_id")
+    );
+  }
+  return (
+    msg.includes("23503") &&
+    (msg.includes("eod_tracker_row_user_id") || msg.includes("violates foreign key"))
+  );
 }
 
 /** Missing `notion_url` (or related 0021 migration) on `eod_tracker_row`. */
@@ -106,7 +118,7 @@ async function ensureSessionUserRow(userId: string): Promise<{ ok: true } | { er
       name: session?.user?.name ?? null,
       image: session?.user?.image ?? null,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing({ target: users.id });
   return { ok: true };
 }
 
@@ -357,12 +369,19 @@ export async function createEodTrackerRowWithData(
       if ("error" in ensured) {
         return ensured;
       }
-      const [inserted] = await insert();
-      if (!inserted) {
-        return { error: "Could not create row" };
+      try {
+        const [inserted] = await insert();
+        if (!inserted) {
+          return { error: "Could not create row" };
+        }
+        revalidatePath("/eod-tracker");
+        return { id: inserted.id };
+      } catch {
+        return {
+          error:
+            "Your session does not match this database (user record is missing). Sign out and sign in again, or point the app at the same database where your account exists.",
+        };
       }
-      revalidatePath("/eod-tracker");
-      return { id: inserted.id };
     }
     if (isMissingRowsTable(error)) {
       return {
