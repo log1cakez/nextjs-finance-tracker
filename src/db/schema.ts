@@ -388,6 +388,8 @@ export const eodAiMonthSummaries = pgTable(
     periodLabel: text("period_label").notNull().default(""),
     /** Sorted `id:updatedAt` lines for rows in that month when the summary was saved. */
     sourceJournalStamp: text("source_journal_stamp"),
+    /** Prod: increments per successful save while `source_journal_stamp` is unchanged; resets to 1 when stamp changes. */
+    aiSummarizeRunCount: integer("ai_summarize_run_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -8,6 +8,7 @@ export type EodAiMonthSummaryDto = {
   periodLabel: string;
   updatedAt: string;
   sourceJournalStamp: string | null;
+  summarizeRunCount: number;
 };
 
 export async function getEodAiMonthSummaryForUser(
@@ -23,6 +24,7 @@ export async function getEodAiMonthSummaryForUser(
         periodLabel: eodAiMonthSummaries.periodLabel,
         updatedAt: eodAiMonthSummaries.updatedAt,
         sourceJournalStamp: eodAiMonthSummaries.sourceJournalStamp,
+        aiSummarizeRunCount: eodAiMonthSummaries.aiSummarizeRunCount,
       })
       .from(eodAiMonthSummaries)
       .where(
@@ -40,6 +42,7 @@ export async function getEodAiMonthSummaryForUser(
       periodLabel: r.periodLabel,
       updatedAt: r.updatedAt.toISOString(),
       sourceJournalStamp: r.sourceJournalStamp ?? null,
+      summarizeRunCount: r.aiSummarizeRunCount ?? 0,
     };
   } catch {
     return null;
@@ -53,9 +56,26 @@ export async function upsertEodAiMonthSummary(
   periodLabel: string,
   tradeCount: number,
   sourceJournalStamp: string,
-): Promise<void> {
+): Promise<{ runCount: number }> {
   const db = getDb();
   const now = new Date();
+  const existing = await db
+    .select({
+      stamp: eodAiMonthSummaries.sourceJournalStamp,
+      runCount: eodAiMonthSummaries.aiSummarizeRunCount,
+    })
+    .from(eodAiMonthSummaries)
+    .where(
+      and(eq(eodAiMonthSummaries.userId, userId), eq(eodAiMonthSummaries.yearMonth, yearMonth)),
+    )
+    .limit(1);
+  const prev = existing[0];
+  const nextRun = prev
+    ? (prev.stamp ?? "") === sourceJournalStamp
+      ? (prev.runCount ?? 0) + 1
+      : 1
+    : 1;
+
   await db
     .insert(eodAiMonthSummaries)
     .values({
@@ -65,6 +85,7 @@ export async function upsertEodAiMonthSummary(
       periodLabel,
       tradeCount,
       sourceJournalStamp,
+      aiSummarizeRunCount: nextRun,
       createdAt: now,
       updatedAt: now,
     })
@@ -75,7 +96,9 @@ export async function upsertEodAiMonthSummary(
         periodLabel,
         tradeCount,
         sourceJournalStamp,
+        aiSummarizeRunCount: nextRun,
         updatedAt: now,
       },
     });
+  return { runCount: nextRun };
 }

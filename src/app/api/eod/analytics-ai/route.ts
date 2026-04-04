@@ -1,9 +1,12 @@
 import { auth } from "@/auth";
 import { getEodTrackerRowsForExcel } from "@/app/actions/eod-tracker-rows";
 import { isEnvDevRuntime } from "@/lib/app-runtime-mode";
-import { isLocalDateInLastThreeDaysOfYearMonth } from "@/lib/eod-ai-month-window";
+import { EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP } from "@/lib/eod-ai-prod-quota";
 import { buildEodAnalyticsPayload, eodRowsForCalendarMonth } from "@/lib/eod-analytics-summary";
-import { upsertEodAiMonthSummary } from "@/lib/eod-ai-summary-store";
+import {
+  getEodAiMonthSummaryForUser,
+  upsertEodAiMonthSummary,
+} from "@/lib/eod-ai-summary-store";
 import { eodMonthJournalDataStamp } from "@/lib/eod-journal-month-stamp";
 
 export const runtime = "nodejs";
@@ -63,21 +66,27 @@ export async function POST(req: Request) {
     );
   }
 
+  const allRows = await getEodTrackerRowsForExcel(userId);
+  const monthRows = eodRowsForCalendarMonth(allRows, year, month);
+  const journalDataStamp = eodMonthJournalDataStamp(allRows, yearMonth);
+
   if (!isEnvDevRuntime()) {
-    if (!isLocalDateInLastThreeDaysOfYearMonth(new Date(), yearMonth)) {
+    const existing = await getEodAiMonthSummaryForUser(userId, yearMonth);
+    if (
+      existing &&
+      (existing.sourceJournalStamp ?? "") === journalDataStamp &&
+      existing.summarizeRunCount >= EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP
+    ) {
       return Response.json(
         {
           error:
-            "In production, new summaries can only be generated during the last three calendar days of that month (your local time). You can still read saved summaries for past months.",
+            "Production allows up to 3 AI summaries for this journal month while your entries are unchanged. Add, edit, or delete a row for this month to run again.",
         },
         { status: 403 },
       );
     }
   }
 
-  const allRows = await getEodTrackerRowsForExcel(userId);
-  const monthRows = eodRowsForCalendarMonth(allRows, year, month);
-  const journalDataStamp = eodMonthJournalDataStamp(allRows, yearMonth);
   const payload = buildEodAnalyticsPayload(monthRows, year, month);
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
@@ -126,8 +135,9 @@ export async function POST(req: Request) {
 
   const savedAt = new Date();
   let persisted = true;
+  let summarizeRunCount: number | null = null;
   try {
-    await upsertEodAiMonthSummary(
+    const { runCount } = await upsertEodAiMonthSummary(
       userId,
       payload.yearMonth,
       text,
@@ -135,6 +145,7 @@ export async function POST(req: Request) {
       payload.totalEntries,
       journalDataStamp,
     );
+    summarizeRunCount = runCount;
   } catch {
     persisted = false;
   }
@@ -145,6 +156,7 @@ export async function POST(req: Request) {
     periodLabel: payload.periodLabel,
     tradeCount: payload.totalEntries,
     journalDataStamp,
+    summarizeRunCount: persisted ? summarizeRunCount : null,
     savedAt: persisted ? savedAt.toISOString() : null,
     persisted,
     persistWarning: persisted

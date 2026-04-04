@@ -44,9 +44,15 @@ export function AppShell({
     <div className="flex min-h-full flex-col">
       {hideHeader ? (
         <div
-          className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 sm:right-4 sm:top-4"
-          aria-label="Display preferences"
+          className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex max-w-[calc(100vw-1.5rem)] flex-row flex-wrap items-center justify-end gap-2 sm:right-4 sm:top-4 sm:max-w-none sm:gap-3"
+          aria-label={user ? "Account and display preferences" : "Display preferences"}
         >
+          {user ? (
+            <UserAccountMenu
+              displayName={user.name || user.email || "Account"}
+              email={user.email}
+            />
+          ) : null}
           <NavbarPreferences initialCurrency={preferredCurrency} />
         </div>
       ) : (
@@ -83,13 +89,13 @@ export function AppShell({
                   </Link>
                 </>
               ) : null}
-              <NavbarPreferences initialCurrency={preferredCurrency} />
               {user ? (
                 <UserAccountMenu
                   displayName={user.name || user.email || "Account"}
                   email={user.email}
                 />
               ) : null}
+              <NavbarPreferences initialCurrency={preferredCurrency} />
             </div>
           </div>
         </header>

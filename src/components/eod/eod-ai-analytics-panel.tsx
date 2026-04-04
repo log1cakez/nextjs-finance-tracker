@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { isLocalDateInLastThreeDaysOfYearMonth } from "@/lib/eod-ai-month-window";
+import { EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP } from "@/lib/eod-ai-prod-quota";
 
 function formatYearMonthHeading(ym: string): string {
   if (!/^\d{4}-\d{2}$/.test(ym)) return ym;
@@ -63,34 +63,29 @@ export function EodAiAnalyticsPanel({
   const [meta, setMeta] = useState<{ periodLabel: string; tradeCount: number } | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [sourceJournalStamp, setSourceJournalStamp] = useState<string | null>(null);
+  const [summarizeRunCount, setSummarizeRunCount] = useState(0);
 
   const canSubmit = useMemo(() => /^\d{4}-\d{2}$/.test(month), [month]);
 
-  const inProdWindow = useMemo(
-    () => isLocalDateInLastThreeDaysOfYearMonth(new Date(), month),
-    [month],
-  );
-
-  /** Production: summarized for this exact journal snapshot (until a row add/edit/delete). */
-  const prodSummaryMatchesLiveJournal = useMemo(() => {
+  /** Production: hit 3 saved runs for this journal snapshot (same month + stamp). */
+  const prodQuotaExhausted = useMemo(() => {
     if (summarizeUnrestricted) return false;
-    if (!sourceJournalStamp) return false;
-    return sourceJournalStamp === journalDataStamp;
-  }, [summarizeUnrestricted, sourceJournalStamp, journalDataStamp]);
+    if (sourceJournalStamp == null || sourceJournalStamp === "") return false;
+    if (sourceJournalStamp !== journalDataStamp) return false;
+    return summarizeRunCount >= EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP;
+  }, [
+    summarizeUnrestricted,
+    sourceJournalStamp,
+    journalDataStamp,
+    summarizeRunCount,
+  ]);
 
   const canClickSummarize = useMemo(() => {
     if (!openAiConfigured || !canSubmit || loading) return false;
     if (summarizeUnrestricted) return true;
-    if (prodSummaryMatchesLiveJournal) return false;
-    return inProdWindow;
-  }, [
-    openAiConfigured,
-    canSubmit,
-    loading,
-    summarizeUnrestricted,
-    prodSummaryMatchesLiveJournal,
-    inProdWindow,
-  ]);
+    if (prodQuotaExhausted) return false;
+    return true;
+  }, [openAiConfigured, canSubmit, loading, summarizeUnrestricted, prodQuotaExhausted]);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +107,7 @@ export function EodAiAnalyticsPanel({
             periodLabel: string;
             updatedAt: string;
             sourceJournalStamp: string | null;
+            summarizeRunCount: number;
           } | null;
         };
         if (cancelled) return;
@@ -120,6 +116,7 @@ export function EodAiAnalyticsPanel({
           setMeta(null);
           setSavedAt(null);
           setSourceJournalStamp(null);
+          setSummarizeRunCount(0);
           setLoadError(data.error ?? "Could not load saved summary.");
           return;
         }
@@ -131,11 +128,17 @@ export function EodAiAnalyticsPanel({
           });
           setSavedAt(data.summary.updatedAt);
           setSourceJournalStamp(data.summary.sourceJournalStamp ?? null);
+          setSummarizeRunCount(
+            typeof data.summary.summarizeRunCount === "number"
+              ? data.summary.summarizeRunCount
+              : 0,
+          );
         } else {
           setText(null);
           setMeta(null);
           setSavedAt(null);
           setSourceJournalStamp(null);
+          setSummarizeRunCount(0);
         }
       } catch {
         if (!cancelled) {
@@ -169,6 +172,7 @@ export function EodAiAnalyticsPanel({
         periodLabel?: string;
         tradeCount?: number;
         journalDataStamp?: string;
+        summarizeRunCount?: number | null;
         savedAt?: string | null;
         persisted?: boolean;
         persistWarning?: string;
@@ -188,6 +192,9 @@ export function EodAiAnalyticsPanel({
         if (data.persisted === true && typeof data.journalDataStamp === "string") {
           setSourceJournalStamp(data.journalDataStamp);
         }
+        if (data.persisted === true && typeof data.summarizeRunCount === "number") {
+          setSummarizeRunCount(data.summarizeRunCount);
+        }
         if (data.persisted === false && data.persistWarning) {
           setPersistWarning(data.persistWarning);
         }
@@ -203,11 +210,9 @@ export function EodAiAnalyticsPanel({
 
   const summarizeTitle = !openAiConfigured
     ? "Configure OPENAI_API_KEY on the server"
-    : !summarizeUnrestricted && prodSummaryMatchesLiveJournal
-      ? "This summary matches your current journal rows. Edit the table (or add/delete an entry) to enable a new run during the last 3 days of the month."
-      : !summarizeUnrestricted && !inProdWindow
-        ? "In production, new summaries are only available during the last 3 days of this month (local time)"
-        : undefined;
+    : !summarizeUnrestricted && prodQuotaExhausted
+      ? `Production allows up to ${EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP} summaries while this month's journal rows are unchanged. Edit the table to run again.`
+      : undefined;
 
   return (
     <section
@@ -288,6 +293,16 @@ export function EodAiAnalyticsPanel({
                 dateStyle: "medium",
                 timeStyle: "short",
               })}
+            </>
+          ) : null}
+          {!summarizeUnrestricted &&
+          sourceJournalStamp != null &&
+          sourceJournalStamp === journalDataStamp &&
+          summarizeRunCount > 0 ? (
+            <>
+              {" "}
+              · production runs for this journal: {summarizeRunCount}/
+              {EOD_AI_PROD_MAX_RUNS_PER_JOURNAL_STAMP}
             </>
           ) : null}
         </p>
