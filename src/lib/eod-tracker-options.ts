@@ -10,13 +10,13 @@ export const EOD_SESSION_OPTIONS = [
 ] as const;
 
 export const EOD_TIMEFRAME_EOF_OPTIONS = [
-  "M15 Wedge",
-  "M15 Bearish",
-  "M15 Bullish",
-  "4H Bearish",
-  "4H Bullish",
-  "Daily Bearish",
   "Daily Bullish",
+  "4H Bullish",
+  "M15 Bullish",
+  "Daily Bearish",
+  "4H Bearish",
+  "M15 Bearish",
+  "M15 Wedge",
 ] as const;
 
 export const EOD_POI_OPTIONS = [

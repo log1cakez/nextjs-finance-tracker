@@ -10,7 +10,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { UserAccountMenu } from "@/components/user-account-menu";
 import type { FiatCurrency } from "@/lib/money";
 
-const HIDE_HEADER_PATHS = new Set(["/login", "/register"]);
+const HIDE_HEADER_PATHS = new Set(["/login", "/register", "/apps"]);
 
 export const mainNav = [
   { href: "/financetracker", label: "Dashboard" },
