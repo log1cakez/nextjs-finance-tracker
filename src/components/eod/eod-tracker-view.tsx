@@ -334,12 +334,10 @@ export function EodTrackerView({
   rows,
   openAiConfigured,
   summarizeUnrestricted,
-  envMode,
 }: {
   rows: EodTrackerRow[];
   openAiConfigured: boolean;
   summarizeUnrestricted: boolean;
-  envMode: "dev" | "prod";
 }) {
   const [selectedMonth, setSelectedMonth] = useState(() => latestYearMonthFromRows(rows));
   const [sort, setSort] = useState<{ column: EodSortColumn; dir: SortDir }>({
@@ -590,7 +588,6 @@ export function EodTrackerView({
           journalDataStamp={journalDataStamp}
           openAiConfigured={openAiConfigured}
           summarizeUnrestricted={summarizeUnrestricted}
-          envMode={envMode}
         />
       </section>
 

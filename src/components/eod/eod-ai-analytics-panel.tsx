@@ -45,7 +45,6 @@ export function EodAiAnalyticsPanel({
   journalDataStamp,
   openAiConfigured,
   summarizeUnrestricted,
-  envMode,
 }: {
   /** Calendar month `YYYY-MM` (from journal month picker). */
   month: string;
@@ -54,7 +53,6 @@ export function EodAiAnalyticsPanel({
   openAiConfigured: boolean;
   /** When true (MIDAS_RUNTIME_MODE=dev), summarize is allowed any day. */
   summarizeUnrestricted: boolean;
-  envMode: "dev" | "prod";
 }) {
   const [loading, setLoading] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
@@ -240,19 +238,6 @@ export function EodAiAnalyticsPanel({
               </code>{" "}
               on the server to generate summaries. You can still open past months to read anything
               already saved.
-            </p>
-          ) : null}
-          {openAiConfigured && !summarizeUnrestricted ? (
-            <p className="mt-2 max-w-xl text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-500">
-              Production:{" "}
-              <strong className="font-medium text-zinc-700 dark:text-zinc-400">Summarize with AI</strong>{" "}
-              is only on the last three calendar days of the selected month (local time). After a saved
-              run, it stays off until you change journal rows for that month.{" "}
-              <code className="rounded bg-zinc-200/90 px-1 py-0.5 font-mono text-[10px] dark:bg-zinc-800/80">
-                MIDAS_RUNTIME_MODE=dev
-              </code>{" "}
-              skips both rules (env:{" "}
-              <span className="text-zinc-700 dark:text-zinc-400">{envMode}</span>).
             </p>
           ) : null}
         </div>
