@@ -331,13 +331,20 @@ function SortableTh({
         onClick={(e) => onSort(column, e.shiftKey)}
         className="mx-auto flex w-full max-w-full touch-manipulation flex-col items-center gap-0.5 rounded-md px-1 py-0.5 text-center hover:bg-zinc-200/80 dark:hover:bg-zinc-800/50 sm:flex-row sm:justify-center sm:gap-1"
       >
-        <span>{label}</span>
-        {active && activeRule ? (
-          <span className="font-mono text-[10px] text-amber-700 dark:text-amber-400/90" aria-hidden>
-            {activeRule.dir === "asc" ? "▲" : "▼"}
-            {sortRules.length > 1 ? `${activeIdx + 1}` : ""}
-          </span>
-        ) : null}
+        <span className="leading-none">{label}</span>
+        <span
+          className="inline-flex h-4 min-w-[1.25rem] items-center justify-center font-mono text-[10px] tabular-nums text-amber-700 dark:text-amber-400/90"
+          aria-hidden
+        >
+          {active && activeRule ? (
+            <>
+              {activeRule.dir === "asc" ? "▲" : "▼"}
+              {sortRules.length > 1 ? activeIdx + 1 : ""}
+            </>
+          ) : (
+            "\u00a0"
+          )}
+        </span>
       </button>
     </th>
   );
@@ -361,6 +368,7 @@ export function EodTrackerView({
 }) {
   const [selectedMonth, setSelectedMonth] = useState(() => latestYearMonthFromRows(rows));
   const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
+  const [showAllInTable, setShowAllInTable] = useState(false);
 
   const handleSort = useCallback((column: EodSortColumn, additive: boolean) => {
     setSortRules((prev) => {
@@ -374,20 +382,27 @@ export function EodTrackerView({
       }
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { column, dir: next[idx]!.dir === "asc" ? "desc" : "asc" };
-        return next;
+        const current = next[idx]!;
+        const toggled: SortRule = {
+          column,
+          dir: current.dir === "asc" ? "desc" : "asc",
+        };
+        next.splice(idx, 1);
+        return [toggled, ...next];
       }
-      return [...prev, { column, dir: defaultDirFor(column) }];
+      return [{ column, dir: defaultDirFor(column) }, ...prev];
     });
   }, []);
 
-  const filteredRows = useMemo(
+  const monthRows = useMemo(
     () => rows.filter((r) => rowYearMonth(r) === selectedMonth),
     [rows, selectedMonth],
   );
 
+  const tableSourceRows = showAllInTable ? rows : monthRows;
+
   const displayRows = useMemo(() => {
-    const copy = [...filteredRows];
+    const copy = [...tableSourceRows];
     copy.sort((a, b) => {
       for (const rule of sortRules) {
         const delta = compareRows(a, b, rule.column, rule.dir);
@@ -396,18 +411,18 @@ export function EodTrackerView({
       return a.id.localeCompare(b.id);
     });
     return copy;
-  }, [filteredRows, sortRules]);
+  }, [tableSourceRows, sortRules]);
 
   const chartRows = useMemo(
     () =>
-      displayRows.map((r) => ({
+      monthRows.map((r) => ({
         tradeDate: r.tradeDate,
         session: r.session,
         result: r.result,
         trend: r.trend,
         position: r.position,
       })),
-    [displayRows],
+    [monthRows],
   );
 
   const journalDataStamp = useMemo(
@@ -446,26 +461,48 @@ export function EodTrackerView({
         ) : (
           <>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <label className="flex w-full max-w-[14rem] flex-col gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                Journal month
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="box-border h-10 min-h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 py-0 text-sm leading-10 text-zinc-900 touch-manipulation dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                />
-              </label>
+              <div className="flex w-full max-w-[14rem] flex-col gap-2">
+                <label className="flex w-full flex-col gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                  Journal month
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="box-border h-10 min-h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 py-0 text-sm leading-10 text-zinc-900 touch-manipulation dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={showAllInTable}
+                    onChange={(e) => setShowAllInTable(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 text-amber-600 accent-amber-500 dark:border-zinc-700"
+                  />
+                  Show all entries in table
+                </label>
+              </div>
               <p className="text-[11px] text-zinc-600 sm:max-w-md sm:text-right dark:text-zinc-500">
-                Showing entries in{" "}
-                <span className="text-zinc-800 dark:text-zinc-400">{monthLabel(selectedMonth)}</span>
-                . AI review and charts below use this month.
+                {showAllInTable ? (
+                  <>
+                    Showing{" "}
+                    <span className="text-zinc-800 dark:text-zinc-400">all months</span>. AI review and
+                    charts below use{" "}
+                    <span className="text-zinc-800 dark:text-zinc-400">{monthLabel(selectedMonth)}</span>.
+                  </>
+                ) : (
+                  <>
+                    Showing entries in{" "}
+                    <span className="text-zinc-800 dark:text-zinc-400">{monthLabel(selectedMonth)}</span>
+                    . AI review and charts below use this month.
+                  </>
+                )}
               </p>
             </div>
             <p className="text-[11px] text-zinc-600 dark:text-zinc-500">
-              Sort tip: click a column to sort by it, or hold <kbd className="rounded border border-zinc-300 px-1 py-0.5 text-[10px] font-semibold dark:border-zinc-700">Shift</kbd> and click more headers to add secondary sorting.
+              Sort tip: Click a column to sort by it, or hold <kbd className="rounded border border-zinc-300 px-1 py-0.5 text-[10px] font-semibold dark:border-zinc-700">Shift</kbd> and click more headers to add secondary sorting.
             </p>
 
-            {filteredRows.length === 0 ? (
+            {!showAllInTable && monthRows.length === 0 ? (
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
                 No journal entries in {monthLabel(selectedMonth)}. Choose another month or add an EOD
                 for this period.
@@ -623,7 +660,7 @@ export function EodTrackerView({
           journalDataStamp={journalDataStamp}
           openAiConfigured={openAiConfigured}
           summarizeUnrestricted={summarizeUnrestricted}
-          journalEntryCountForMonth={filteredRows.length}
+          journalEntryCountForMonth={monthRows.length}
         />
       </section>
 

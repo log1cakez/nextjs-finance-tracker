@@ -97,7 +97,10 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
   const emptyRange = model.kpi.entries === 0;
 
   return (
-    <section className="space-y-3" aria-labelledby="eod-charts-heading">
+    <section
+      className="space-y-3 rounded-xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/90 sm:p-5"
+      aria-labelledby="eod-charts-heading"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2
