@@ -23,21 +23,6 @@ function splitMultiValue(raw: string): string[] {
     .filter(Boolean);
 }
 
-function currentYearMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function latestYearMonthFromRows(rows: EodTrackerRow[]): string {
-  if (rows.length === 0) return currentYearMonth();
-  let best = rows[0]!.tradeDate.slice(0, 7);
-  for (const r of rows) {
-    const ym = r.tradeDate.slice(0, 7);
-    if (ym > best) best = ym;
-  }
-  return best;
-}
-
 function rowYearMonth(row: EodTrackerRow): string {
   return row.tradeDate.slice(0, 7);
 }
@@ -60,6 +45,13 @@ type EodSortColumn =
 
 type SortDir = "asc" | "desc";
 type SortRule = { column: EodSortColumn; dir: SortDir };
+
+/** At most one primary + one secondary sort column (Shift+click adds secondary). */
+const MAX_SORT_RULES = 2;
+
+function capSortRules(rules: SortRule[]): SortRule[] {
+  return rules.slice(0, MAX_SORT_RULES);
+}
 
 function defaultDirFor(column: EodSortColumn): SortDir {
   if (column === "weekday") return "asc";
@@ -359,14 +351,17 @@ function monthLabel(ym: string): string {
 
 export function EodTrackerView({
   rows,
+  initialJournalMonth,
   openAiConfigured,
   summarizeUnrestricted,
 }: {
   rows: EodTrackerRow[];
+  /** From the server so the month picker matches SSR HTML on first paint. */
+  initialJournalMonth: string;
   openAiConfigured: boolean;
   summarizeUnrestricted: boolean;
 }) {
-  const [selectedMonth, setSelectedMonth] = useState(() => latestYearMonthFromRows(rows));
+  const [selectedMonth, setSelectedMonth] = useState(initialJournalMonth);
   const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
   const [showAllInTable, setShowAllInTable] = useState(false);
 
@@ -376,9 +371,9 @@ export function EodTrackerView({
       if (!additive) {
         if (idx === 0) {
           const toggled = prev[0]?.dir === "asc" ? "desc" : "asc";
-          return [{ column, dir: toggled }];
+          return capSortRules([{ column, dir: toggled }]);
         }
-        return [{ column, dir: defaultDirFor(column) }];
+        return capSortRules([{ column, dir: defaultDirFor(column) }]);
       }
       if (idx >= 0) {
         const next = [...prev];
@@ -388,9 +383,9 @@ export function EodTrackerView({
           dir: current.dir === "asc" ? "desc" : "asc",
         };
         next.splice(idx, 1);
-        return [toggled, ...next];
+        return capSortRules([toggled, ...next]);
       }
-      return [{ column, dir: defaultDirFor(column) }, ...prev];
+      return capSortRules([{ column, dir: defaultDirFor(column) }, ...prev]);
     });
   }, []);
 
@@ -461,7 +456,8 @@ export function EodTrackerView({
         ) : (
           <>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex w-full max-w-[14rem] flex-col gap-2">
+              <fieldset className="m-0 flex w-full min-w-0 max-w-[14rem] flex-col gap-2 border-0 p-0">
+                <legend className="sr-only">Journal month and table scope</legend>
                 <label className="flex w-full flex-col gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                   Journal month
                   <input
@@ -480,7 +476,7 @@ export function EodTrackerView({
                   />
                   Show all entries in table
                 </label>
-              </div>
+              </fieldset>
               <p className="text-[11px] text-zinc-600 sm:max-w-md sm:text-right dark:text-zinc-500">
                 {showAllInTable ? (
                   <>
@@ -499,7 +495,7 @@ export function EodTrackerView({
               </p>
             </div>
             <p className="text-[11px] text-zinc-600 dark:text-zinc-500">
-              Sort tip: Click a column to sort by it, or hold <kbd className="rounded border border-zinc-300 px-1 py-0.5 text-[10px] font-semibold dark:border-zinc-700">Shift</kbd> and click more headers to add secondary sorting.
+              Sort tip: Click a column to sort by it, or hold <kbd className="rounded border border-zinc-300 px-1 py-0.5 text-[10px] font-semibold dark:border-zinc-700">Shift</kbd> and click one other header for a secondary sort (max two columns). Adding a third replaces the previous secondary.
             </p>
 
             {!showAllInTable && monthRows.length === 0 ? (
