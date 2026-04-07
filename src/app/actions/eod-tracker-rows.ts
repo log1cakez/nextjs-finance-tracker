@@ -126,7 +126,14 @@ const optionalFrom = <T extends readonly string[]>(list: T) =>
   z
     .string()
     .trim()
-    .refine((v) => v === "" || (list as readonly string[]).includes(v), "Invalid value");
+    .refine((v) => {
+      if (v === "") return true;
+      return v
+        .split("|")
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .every((x) => (list as readonly string[]).includes(x));
+    }, "Invalid value");
 
 const multiFrom = <T extends readonly string[]>(list: T) =>
   z

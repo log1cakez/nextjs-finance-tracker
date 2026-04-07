@@ -157,7 +157,24 @@ const ENTRY_TF_TONE: Partial<Record<string, EodPillTone>> = {
 export function getEodOptionTone(field: string, value: string): EodPillTone {
   switch (field) {
     case "weekday":
-      return "grey";
+      switch (value) {
+        case "Monday":
+          return "blue";
+        case "Tuesday":
+          return "purple";
+        case "Wednesday":
+          return "amber";
+        case "Thursday":
+          return "cyan";
+        case "Friday":
+          return "emerald";
+        case "Saturday":
+          return "pink";
+        case "Sunday":
+          return "red";
+        default:
+          return "grey";
+      }
     case "session":
       return SESSION_TONE[value as keyof typeof SESSION_TONE] ?? "grey";
     case "timeframeEof":

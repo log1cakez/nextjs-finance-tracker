@@ -17,7 +17,7 @@ import {
   EOD_TIMEFRAME_EOF_OPTIONS,
   EOD_TREND_OPTIONS,
 } from "@/lib/eod-tracker-options";
-import { MultiTagPicker, SingleTagPicker } from "@/components/eod/eod-tag-field";
+import { MultiTagPicker } from "@/components/eod/eod-tag-field";
 
 export type AddEodModalProps = {
   open: boolean;
@@ -52,6 +52,7 @@ function splitRange(v: string): { start: string; end: string } {
 const MINUTE_OPTIONS = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"] as const;
 
 const MINUTES_24H = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+const MULTI_VALUE_DELIMITER = " | ";
 
 /** Parse HH:MM (24h) for 24h picker selects; empty/invalid → defaults for display. */
 function parse24Parts(v: string): { hh: string; mm: string } {
@@ -70,6 +71,13 @@ function to24HourString(hh: string, mm: string): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function splitMultiValue(raw: string): string[] {
+  return raw
+    .split(MULTI_VALUE_DELIMITER)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export function AddEodModal({ open, onClose, mode = "create", initialData, pending: externalPending = false, onSubmit }: AddEodModalProps) {
   const router = useRouter();
   const [localPending, startTransition] = useTransition();
@@ -81,33 +89,33 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
   }, [initialData, today]);
 
   const [tradeDate, setTradeDate] = useState(seed.tradeDate);
-  const [session, setSession] = useState(seed.session);
+  const [session, setSession] = useState<string[]>(splitMultiValue(seed.session));
   const [timeframeEof, setTimeframeEof] = useState<string[]>(seed.timeframeEof);
   const [poi, setPoi] = useState<string[]>(seed.poi);
-  const [trend, setTrend] = useState(seed.trend);
-  const [position, setPosition] = useState(seed.position);
-  const [riskType, setRiskType] = useState(seed.riskType);
+  const [trend, setTrend] = useState<string[]>(splitMultiValue(seed.trend));
+  const [position, setPosition] = useState<string[]>(splitMultiValue(seed.position));
+  const [riskType, setRiskType] = useState<string[]>(splitMultiValue(seed.riskType));
   const [result, setResult] = useState<string[]>(seed.result);
-  const [rrr, setRrr] = useState(seed.rrr);
+  const [rrr, setRrr] = useState<string[]>(splitMultiValue(seed.rrr));
   const [timeFormat, setTimeFormat] = useState<TimeFormatMode>("24h");
   const [startTime, setStartTime] = useState(splitRange(seed.timeRange).start);
   const [endTime, setEndTime] = useState(splitRange(seed.timeRange).end);
-  const [entryTf, setEntryTf] = useState(seed.entryTf);
+  const [entryTf, setEntryTf] = useState<string[]>(splitMultiValue(seed.entryTf));
   const [remarks, setRemarks] = useState(seed.remarks);
   const [notionUrl, setNotionUrl] = useState(seed.notionUrl);
 
   const reset = useCallback(() => {
-    setTradeDate(seed.tradeDate); setSession(seed.session); setTimeframeEof(seed.timeframeEof); setPoi(seed.poi);
-    setTrend(seed.trend); setPosition(seed.position); setRiskType(seed.riskType); setResult(seed.result);
-    setRrr(seed.rrr); setTimeFormat("24h"); const t = splitRange(seed.timeRange); setStartTime(t.start); setEndTime(t.end);
-    setEntryTf(seed.entryTf); setRemarks(seed.remarks); setNotionUrl(seed.notionUrl);
+    setTradeDate(seed.tradeDate); setSession(splitMultiValue(seed.session)); setTimeframeEof(seed.timeframeEof); setPoi(seed.poi);
+    setTrend(splitMultiValue(seed.trend)); setPosition(splitMultiValue(seed.position)); setRiskType(splitMultiValue(seed.riskType)); setResult(seed.result);
+    setRrr(splitMultiValue(seed.rrr)); setTimeFormat("24h"); const t = splitRange(seed.timeRange); setStartTime(t.start); setEndTime(t.end);
+    setEntryTf(splitMultiValue(seed.entryTf)); setRemarks(seed.remarks); setNotionUrl(seed.notionUrl);
   }, [seed]);
 
   useEffect(() => { if (open) reset(); }, [open, reset]);
   useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && onClose(); document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, [open, onClose]);
   if (!open) return null;
 
-  const payload: CreateEodRowInput = { tradeDate, session, timeframeEof, poi, trend, position, riskType, result, rrr, timeRange: startTime && endTime ? `${startTime}-${endTime}` : startTime || endTime || "", entryTf, remarks, notionUrl };
+  const payload: CreateEodRowInput = { tradeDate, session: session.join(MULTI_VALUE_DELIMITER), timeframeEof, poi, trend: trend.join(MULTI_VALUE_DELIMITER), position: position.join(MULTI_VALUE_DELIMITER), riskType: riskType.join(MULTI_VALUE_DELIMITER), result, rrr: rrr.join(MULTI_VALUE_DELIMITER), timeRange: startTime && endTime ? `${startTime}-${endTime}` : startTime || endTime || "", entryTf: entryTf.join(MULTI_VALUE_DELIMITER), remarks, notionUrl };
   const submit = () => {
     if (mode === "edit" && onSubmit) return onSubmit(payload);
     startTransition(async () => {
@@ -146,14 +154,14 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
               className="eod-modal-date min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
           </label>
-          <SingleTagPicker label="Session" fieldKey="session" options={EOD_SESSION_OPTIONS} value={session} onChange={setSession} />
+          <MultiTagPicker label="Session" fieldKey="session" options={EOD_SESSION_OPTIONS} values={session} onChange={setSession} />
           <MultiTagPicker label="Timeframe EOF" fieldKey="timeframeEof" options={EOD_TIMEFRAME_EOF_OPTIONS} values={timeframeEof} onChange={setTimeframeEof} />
           <MultiTagPicker label="Point of Interest" fieldKey="poi" options={EOD_POI_OPTIONS} values={poi} onChange={setPoi} />
-          <SingleTagPicker label="Trend" fieldKey="trend" options={EOD_TREND_OPTIONS} value={trend} onChange={setTrend} />
-          <SingleTagPicker label="Position" fieldKey="position" options={EOD_POSITION_OPTIONS} value={position} onChange={setPosition} />
-          <SingleTagPicker label="Risk Type" fieldKey="riskType" options={EOD_RISK_TYPE_OPTIONS} value={riskType} onChange={setRiskType} />
+          <MultiTagPicker label="Trend" fieldKey="trend" options={EOD_TREND_OPTIONS} values={trend} onChange={setTrend} />
+          <MultiTagPicker label="Position" fieldKey="position" options={EOD_POSITION_OPTIONS} values={position} onChange={setPosition} />
+          <MultiTagPicker label="Risk Type" fieldKey="riskType" options={EOD_RISK_TYPE_OPTIONS} values={riskType} onChange={setRiskType} />
           <MultiTagPicker label="Result" fieldKey="result" options={EOD_RESULT_OPTIONS} values={result} onChange={setResult} />
-          <SingleTagPicker label="RRR" fieldKey="rrr" options={EOD_RRR_OPTIONS} value={rrr} onChange={setRrr} />
+          <MultiTagPicker label="RRR" fieldKey="rrr" options={EOD_RRR_OPTIONS} values={rrr} onChange={setRrr} />
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
               Time
@@ -280,7 +288,7 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
               </div>
             )}
           </label>
-          <SingleTagPicker label="Entry TF" fieldKey="entryTf" options={EOD_ENTRY_TF_OPTIONS} value={entryTf} onChange={setEntryTf} />
+          <MultiTagPicker label="Entry TF" fieldKey="entryTf" options={EOD_ENTRY_TF_OPTIONS} values={entryTf} onChange={setEntryTf} />
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
               Remarks

@@ -14,6 +14,14 @@ import { eodPillClass, getEodOptionTone } from "@/lib/eod-tracker-options";
 
 /** Fixed locale so SSR and client match (avoids hydration mismatch on dates). */
 const EOD_DISPLAY_LOCALE = "en-US";
+const MULTI_VALUE_DELIMITER = "|";
+
+function splitMultiValue(raw: string): string[] {
+  return raw
+    .split(MULTI_VALUE_DELIMITER)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
 
 function currentYearMonth(): string {
   const d = new Date();
@@ -51,6 +59,7 @@ type EodSortColumn =
   | "date";
 
 type SortDir = "asc" | "desc";
+type SortRule = { column: EodSortColumn; dir: SortDir };
 
 function defaultDirFor(column: EodSortColumn): SortDir {
   if (column === "weekday") return "asc";
@@ -213,7 +222,7 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
       </div>
       <div className="space-y-2.5">
         <FieldLine label="Session">
-          <PillOne value={row.session} fieldKey="session" />
+          <PillList items={splitMultiValue(row.session)} fieldKey="session" align="start" />
         </FieldLine>
         <FieldLine label="Timeframe EOF">
           <PillList items={row.timeframeEof} fieldKey="timeframeEof" align="start" />
@@ -222,19 +231,19 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
           <PillList items={row.poi} fieldKey="poi" align="start" />
         </FieldLine>
         <FieldLine label="Trend">
-          <PillOne value={row.trend} fieldKey="trend" />
+          <PillList items={splitMultiValue(row.trend)} fieldKey="trend" align="start" />
         </FieldLine>
         <FieldLine label="Position">
-          <PillOne value={row.position} fieldKey="position" />
+          <PillList items={splitMultiValue(row.position)} fieldKey="position" align="start" />
         </FieldLine>
         <FieldLine label="Risk">
-          <PillOne value={row.riskType} fieldKey="riskType" />
+          <PillList items={splitMultiValue(row.riskType)} fieldKey="riskType" align="start" />
         </FieldLine>
         <FieldLine label="Result">
           <PillList items={row.result} fieldKey="result" align="start" />
         </FieldLine>
         <FieldLine label="RRR">
-          <PillOne value={row.rrr} fieldKey="rrr" />
+          <PillList items={splitMultiValue(row.rrr)} fieldKey="rrr" align="start" />
         </FieldLine>
         <FieldLine label="Time">
           {row.timeRange ? (
@@ -246,7 +255,7 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
           )}
         </FieldLine>
         <FieldLine label="Entry TF">
-          <PillOne value={row.entryTf} fieldKey="entryTf" />
+          <PillList items={splitMultiValue(row.entryTf)} fieldKey="entryTf" align="start" />
         </FieldLine>
         <FieldLine label="Remarks">
           {row.remarks ? (
@@ -294,31 +303,39 @@ const SORTABLE: { column: EodSortColumn; label: string }[] = [
 function SortableTh({
   column,
   label,
-  sortColumn,
-  sortDir,
+  sortRules,
   onSort,
 }: {
   column: EodSortColumn;
   label: string;
-  sortColumn: EodSortColumn;
-  sortDir: SortDir;
-  onSort: (c: EodSortColumn) => void;
+  sortRules: SortRule[];
+  onSort: (c: EodSortColumn, additive: boolean) => void;
 }) {
-  const active = sortColumn === column;
+  const activeIdx = sortRules.findIndex((r) => r.column === column);
+  const active = activeIdx >= 0;
+  const activeRule = active ? sortRules[activeIdx] : null;
+  const isPrimary = activeIdx === 0;
   return (
     <th
       className="min-w-[5.5rem]"
-      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      aria-sort={
+        isPrimary && activeRule
+          ? activeRule.dir === "asc"
+            ? "ascending"
+            : "descending"
+          : "none"
+      }
     >
       <button
         type="button"
-        onClick={() => onSort(column)}
+        onClick={(e) => onSort(column, e.shiftKey)}
         className="mx-auto flex w-full max-w-full touch-manipulation flex-col items-center gap-0.5 rounded-md px-1 py-0.5 text-center hover:bg-zinc-200/80 dark:hover:bg-zinc-800/50 sm:flex-row sm:justify-center sm:gap-1"
       >
         <span>{label}</span>
-        {active ? (
+        {active && activeRule ? (
           <span className="font-mono text-[10px] text-amber-700 dark:text-amber-400/90" aria-hidden>
-            {sortDir === "asc" ? "▲" : "▼"}
+            {activeRule.dir === "asc" ? "▲" : "▼"}
+            {sortRules.length > 1 ? `${activeIdx + 1}` : ""}
           </span>
         ) : null}
       </button>
@@ -343,17 +360,24 @@ export function EodTrackerView({
   summarizeUnrestricted: boolean;
 }) {
   const [selectedMonth, setSelectedMonth] = useState(() => latestYearMonthFromRows(rows));
-  const [sort, setSort] = useState<{ column: EodSortColumn; dir: SortDir }>({
-    column: "date",
-    dir: "desc",
-  });
+  const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
 
-  const handleSort = useCallback((column: EodSortColumn) => {
-    setSort((prev) => {
-      if (prev.column === column) {
-        return { column, dir: prev.dir === "asc" ? "desc" : "asc" };
+  const handleSort = useCallback((column: EodSortColumn, additive: boolean) => {
+    setSortRules((prev) => {
+      const idx = prev.findIndex((r) => r.column === column);
+      if (!additive) {
+        if (idx === 0) {
+          const toggled = prev[0]?.dir === "asc" ? "desc" : "asc";
+          return [{ column, dir: toggled }];
+        }
+        return [{ column, dir: defaultDirFor(column) }];
       }
-      return { column, dir: defaultDirFor(column) };
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { column, dir: next[idx]!.dir === "asc" ? "desc" : "asc" };
+        return next;
+      }
+      return [...prev, { column, dir: defaultDirFor(column) }];
     });
   }, []);
 
@@ -364,9 +388,15 @@ export function EodTrackerView({
 
   const displayRows = useMemo(() => {
     const copy = [...filteredRows];
-    copy.sort((a, b) => compareRows(a, b, sort.column, sort.dir));
+    copy.sort((a, b) => {
+      for (const rule of sortRules) {
+        const delta = compareRows(a, b, rule.column, rule.dir);
+        if (delta !== 0) return delta;
+      }
+      return a.id.localeCompare(b.id);
+    });
     return copy;
-  }, [filteredRows, sort.column, sort.dir]);
+  }, [filteredRows, sortRules]);
 
   const chartRows = useMemo(
     () =>
@@ -431,6 +461,9 @@ export function EodTrackerView({
                 . AI review and charts below use this month.
               </p>
             </div>
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-500">
+              Sort tip: click a column to sort by it, or hold <kbd className="rounded border border-zinc-300 px-1 py-0.5 text-[10px] font-semibold dark:border-zinc-700">Shift</kbd> and click more headers to add secondary sorting.
+            </p>
 
             {filteredRows.length === 0 ? (
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
@@ -470,8 +503,7 @@ export function EodTrackerView({
                             key={column}
                             column={column}
                             label={label}
-                            sortColumn={sort.column}
-                            sortDir={sort.dir}
+                            sortRules={sortRules}
                             onSort={handleSort}
                           />
                         ))}
@@ -498,7 +530,7 @@ export function EodTrackerView({
                               <PillOne value={weekday} fieldKey="weekday" />
                             </td>
                             <td>
-                              <PillOne value={row.session} fieldKey="session" />
+                              <PillList items={splitMultiValue(row.session)} fieldKey="session" />
                             </td>
                             <td>
                               <PillList items={row.timeframeEof} fieldKey="timeframeEof" />
@@ -507,25 +539,25 @@ export function EodTrackerView({
                               <PillList items={row.poi} fieldKey="poi" />
                             </td>
                             <td>
-                              <PillOne value={row.trend} fieldKey="trend" />
+                              <PillList items={splitMultiValue(row.trend)} fieldKey="trend" />
                             </td>
                             <td>
-                              <PillOne value={row.position} fieldKey="position" />
+                              <PillList items={splitMultiValue(row.position)} fieldKey="position" />
                             </td>
                             <td>
-                              <PillOne value={row.riskType} fieldKey="riskType" />
+                              <PillList items={splitMultiValue(row.riskType)} fieldKey="riskType" />
                             </td>
                             <td>
                               <PillList items={row.result} fieldKey="result" />
                             </td>
                             <td>
-                              <PillOne value={row.rrr} fieldKey="rrr" />
+                              <PillList items={splitMultiValue(row.rrr)} fieldKey="rrr" />
                             </td>
                             <td className="min-w-0 whitespace-pre-wrap break-words text-center text-zinc-700 dark:text-zinc-300">
                               {row.timeRange || "—"}
                             </td>
                             <td>
-                              <PillOne value={row.entryTf} fieldKey="entryTf" />
+                              <PillList items={splitMultiValue(row.entryTf)} fieldKey="entryTf" />
                             </td>
                             <td className="min-w-0 break-words text-center text-zinc-700 dark:text-zinc-300">
                               {row.remarks || "-"}
