@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
-import { eodTrackerRows, users } from "@/db/schema";
+import { eodTrackerRows, eodTradingAccounts, users } from "@/db/schema";
 import {
   EOD_ENTRY_TF_OPTIONS,
   EOD_POI_OPTIONS,
@@ -166,10 +166,16 @@ const createPayloadSchema = z.object({
         return false;
       }
     }, "Notion link must be a valid http(s) URL or empty"),
+  tradingAccountId: z.string().uuid().nullish(),
+  netPnlCents: z.number().int().nullish(),
 });
 
 export type EodTrackerRow = {
   id: string;
+  tradingAccountId: string | null;
+  netPnlCents: number | null;
+  /** Joined label for exports and dashboard table; null when unassigned. */
+  tradingAccountName: string | null;
   tradeDate: string;
   session: string;
   timeframeEof: string[];
@@ -196,6 +202,8 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
     const rows = await getDb()
       .select({
         id: eodTrackerRows.id,
+        tradingAccountId: eodTrackerRows.tradingAccountId,
+        netPnlCents: eodTrackerRows.netPnlCents,
         tradeDate: eodTrackerRows.tradeDate,
         session: eodTrackerRows.session,
         timeframeEofJson: eodTrackerRows.timeframeEofJson,
@@ -211,12 +219,17 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
         notionUrl: eodTrackerRows.notionUrl,
         createdAt: eodTrackerRows.createdAt,
         updatedAt: eodTrackerRows.updatedAt,
+        tradingAccountName: eodTradingAccounts.name,
       })
       .from(eodTrackerRows)
+      .leftJoin(eodTradingAccounts, eq(eodTrackerRows.tradingAccountId, eodTradingAccounts.id))
       .where(eq(eodTrackerRows.userId, userId))
       .orderBy(desc(eodTrackerRows.updatedAt));
     const mapped = rows.map((r) => ({
       id: r.id,
+      tradingAccountId: r.tradingAccountId ?? null,
+      netPnlCents: r.netPnlCents ?? null,
+      tradingAccountName: r.tradingAccountName ?? null,
       tradeDate: r.tradeDate.toISOString(),
       session: r.session,
       timeframeEof: parseJsonStringArray(r.timeframeEofJson),
@@ -269,6 +282,8 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
     const rows = await getDb()
       .select({
         id: eodTrackerRows.id,
+        tradingAccountId: eodTrackerRows.tradingAccountId,
+        netPnlCents: eodTrackerRows.netPnlCents,
         tradeDate: eodTrackerRows.tradeDate,
         session: eodTrackerRows.session,
         timeframeEofJson: eodTrackerRows.timeframeEofJson,
@@ -284,13 +299,18 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
         notionUrl: eodTrackerRows.notionUrl,
         createdAt: eodTrackerRows.createdAt,
         updatedAt: eodTrackerRows.updatedAt,
+        tradingAccountName: eodTradingAccounts.name,
       })
       .from(eodTrackerRows)
+      .leftJoin(eodTradingAccounts, eq(eodTrackerRows.tradingAccountId, eodTradingAccounts.id))
       .where(eq(eodTrackerRows.userId, userId))
       .orderBy(desc(eodTrackerRows.updatedAt));
 
     return rows.map((r) => ({
       id: r.id,
+      tradingAccountId: r.tradingAccountId ?? null,
+      netPnlCents: r.netPnlCents ?? null,
+      tradingAccountName: r.tradingAccountName ?? null,
       tradeDate: r.tradeDate.toISOString(),
       session: r.session,
       timeframeEof: parseJsonStringArray(r.timeframeEofJson),
@@ -346,6 +366,8 @@ export async function createEodTrackerRowWithData(
   const values = {
     userId,
     tradeDate: tradeDateFromInput(d.tradeDate),
+    tradingAccountId: d.tradingAccountId ?? null,
+    netPnlCents: d.netPnlCents ?? null,
     session: d.session,
     timeframeEofJson: JSON.stringify(d.timeframeEof),
     poiJson: JSON.stringify(d.poi),
@@ -425,6 +447,8 @@ export async function updateEodTrackerRowWithData(
       .update(eodTrackerRows)
       .set({
         tradeDate: tradeDateFromInput(d.tradeDate),
+        tradingAccountId: d.tradingAccountId ?? null,
+        netPnlCents: d.netPnlCents ?? null,
         session: d.session,
         timeframeEofJson: JSON.stringify(d.timeframeEof),
         poiJson: JSON.stringify(d.poi),

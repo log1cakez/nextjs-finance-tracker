@@ -3,6 +3,13 @@ import type { EodTrackerRow } from "@/app/actions/eod-tracker-rows";
 
 function rowToRecord(r: EodTrackerRow) {
   const dt = new Date(r.tradeDate);
+  const pnl =
+    r.netPnlCents === null
+      ? ""
+      : (r.netPnlCents / 100).toLocaleString(undefined, {
+          style: "currency",
+          currency: "USD",
+        });
   return {
     Weekday: dt.toLocaleDateString(undefined, { weekday: "long" }),
     Date: dt.toLocaleDateString(undefined, {
@@ -10,6 +17,8 @@ function rowToRecord(r: EodTrackerRow) {
       day: "numeric",
       year: "numeric",
     }),
+    "Trading account": r.tradingAccountName ?? "",
+    "Net P&L (USD)": pnl,
     Session: r.session || "",
     "Timeframe EOF": r.timeframeEof.join("; "),
     "Point of interest": r.poi.join("; "),
@@ -38,6 +47,8 @@ export function buildEodExportXlsxBuffer(
           {
             Weekday: "—",
             Date: "",
+            "Trading account": "",
+            "Net P&L (USD)": "",
             Session: "",
             "Timeframe EOF": "",
             "Point of interest": "",

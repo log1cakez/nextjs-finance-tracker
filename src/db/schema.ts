@@ -346,12 +346,36 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Broker / exchange bucket for trading dashboard P&L rollups (not OAuth accounts). */
+export const eodTradingAccounts = pgTable(
+  "eod_trading_account",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Starting balance in USD minor units (cents). */
+    initialCapitalCents: integer("initial_capital_cents").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userIdx: uniqueIndex("eod_trading_account_user_name").on(t.userId, t.name),
+  }),
+);
+
 /** EOD table rows. Optional Notion page URLs are stored in `notionUrl`. */
 export const eodTrackerRows = pgTable("eod_tracker_row", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  tradingAccountId: uuid("trading_account_id").references(() => eodTradingAccounts.id, {
+    onDelete: "set null",
+  }),
+  /** Net P&L for this journal row in USD cents; null when not logged. */
+  netPnlCents: integer("net_pnl_cents"),
   /** Trade / journal date (weekday + date column derive from this). */
   tradeDate: timestamp("trade_date", { withTimezone: true }).notNull().defaultNow(),
   session: text("session").notNull().default(""),
@@ -409,6 +433,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(transactions),
   lendings: many(lendings),
   eodTrackerRows: many(eodTrackerRows),
+  eodTradingAccounts: many(eodTradingAccounts),
   eodAiMonthSummaries: many(eodAiMonthSummaries),
 }));
 
@@ -520,8 +545,17 @@ export const lendingPaymentsRelations = relations(lendingPayments, ({ one }) => 
   }),
 }));
 
+export const eodTradingAccountsRelations = relations(eodTradingAccounts, ({ one, many }) => ({
+  user: one(users, { fields: [eodTradingAccounts.userId], references: [users.id] }),
+  eodRows: many(eodTrackerRows),
+}));
+
 export const eodTrackerRowsRelations = relations(eodTrackerRows, ({ one }) => ({
   user: one(users, { fields: [eodTrackerRows.userId], references: [users.id] }),
+  tradingAccount: one(eodTradingAccounts, {
+    fields: [eodTrackerRows.tradingAccountId],
+    references: [eodTradingAccounts.id],
+  }),
 }));
 
 export const eodAiMonthSummariesRelations = relations(eodAiMonthSummaries, ({ one }) => ({
@@ -545,6 +579,7 @@ export const schema = {
   appFxRates,
   transactions,
   eodTrackerRows,
+  eodTradingAccounts,
   eodAiMonthSummaries,
   usersRelations,
   accountsRelations,
@@ -559,5 +594,6 @@ export const schema = {
   lendingPaymentsRelations,
   transactionsRelations,
   eodTrackerRowsRelations,
+  eodTradingAccountsRelations,
   eodAiMonthSummariesRelations,
 };

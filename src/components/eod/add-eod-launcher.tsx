@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
 import { AddEodModal } from "@/components/eod/add-eod-modal";
 
-export function AddEodLauncher() {
+export function AddEodLauncher({ tradingAccounts }: { tradingAccounts: EodTradingAccount[] }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -15,7 +16,7 @@ export function AddEodLauncher() {
       >
         + Add new EOD
       </button>
-      <AddEodModal open={open} onClose={() => setOpen(false)} />
+      <AddEodModal open={open} onClose={() => setOpen(false)} tradingAccounts={tradingAccounts} />
     </>
   );
 }

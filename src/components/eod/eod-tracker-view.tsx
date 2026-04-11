@@ -3,14 +3,18 @@
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import type { EodTrackerRow } from "@/app/actions/eod-tracker-rows";
+import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
 import { AddEodLauncher } from "@/components/eod/add-eod-launcher";
 import { EodAiAnalyticsPanel } from "@/components/eod/eod-ai-analytics-panel";
 import { EodAnalyticsCharts } from "@/components/eod/eod-analytics-charts";
 import { EodRowManageActions } from "@/components/eod/eod-row-manage-actions";
+import { PnlCalendar } from "@/components/eod/pnl-calendar";
+import { TradingAccountsSection } from "@/components/eod/trading-accounts-section";
 import { EOD_SECTION_IDS } from "@/lib/eod-section-ids";
 import { eodMonthJournalDataStamp } from "@/lib/eod-journal-month-stamp";
 import type { EodPillTone } from "@/lib/eod-tracker-options";
 import { eodPillClass, getEodOptionTone } from "@/lib/eod-tracker-options";
+import { formatUsdFromCents } from "@/lib/eod-money";
 
 /** Fixed locale so SSR and client match (avoids hydration mismatch on dates). */
 const EOD_DISPLAY_LOCALE = "en-US";
@@ -29,6 +33,7 @@ function rowYearMonth(row: EodTrackerRow): string {
 
 type EodSortColumn =
   | "weekday"
+  | "broker"
   | "session"
   | "timeframeEof"
   | "poi"
@@ -36,6 +41,7 @@ type EodSortColumn =
   | "position"
   | "riskType"
   | "result"
+  | "pnl"
   | "rrr"
   | "timeRange"
   | "entryTf"
@@ -56,6 +62,7 @@ function capSortRules(rules: SortRule[]): SortRule[] {
 function defaultDirFor(column: EodSortColumn): SortDir {
   if (column === "weekday") return "asc";
   if (column === "date") return "desc";
+  if (column === "pnl") return "desc";
   return "asc";
 }
 
@@ -67,6 +74,8 @@ function weekdayIndexMondayFirst(tradeDateIso: string): number {
 
 function rowComparableString(row: EodTrackerRow, column: EodSortColumn): string {
   switch (column) {
+    case "broker":
+      return row.tradingAccountName ?? "";
     case "session":
       return row.session;
     case "timeframeEof":
@@ -111,6 +120,16 @@ function compareRows(
     }
   } else if (column === "date") {
     delta = new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
+  } else if (column === "pnl") {
+    if (a.netPnlCents === null && b.netPnlCents === null) {
+      delta = 0;
+    } else if (a.netPnlCents === null) {
+      return 1;
+    } else if (b.netPnlCents === null) {
+      return -1;
+    } else {
+      delta = a.netPnlCents - b.netPnlCents;
+    }
   } else if (column === "notion") {
     const ha = a.notionUrl.trim() ? 1 : 0;
     const hb = b.notionUrl.trim() ? 1 : 0;
@@ -177,7 +196,13 @@ function FieldLine({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
+function EodMobileRowCard({
+  row,
+  tradingAccounts,
+}: {
+  row: EodTrackerRow;
+  tradingAccounts: EodTradingAccount[];
+}) {
   const dt = new Date(row.tradeDate);
   const weekday = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, { weekday: "long" });
   const dateLabel = dt.toLocaleDateString(EOD_DISPLAY_LOCALE, {
@@ -195,6 +220,7 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
         </div>
         <EodRowManageActions
           rowId={row.id}
+          tradingAccounts={tradingAccounts}
           initial={{
             tradeDate: row.tradeDate.slice(0, 10),
             session: row.session,
@@ -209,10 +235,26 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
             entryTf: row.entryTf,
             remarks: row.remarks,
             notionUrl: row.notionUrl,
+            tradingAccountId: row.tradingAccountId,
+            netPnlCents: row.netPnlCents,
           }}
         />
       </div>
       <div className="space-y-2.5">
+        <FieldLine label="Account">
+          {row.tradingAccountName ? (
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{row.tradingAccountName}</span>
+          ) : (
+            <span className="text-zinc-400 dark:text-zinc-500">—</span>
+          )}
+        </FieldLine>
+        <FieldLine label="Net P&amp;L">
+          {row.netPnlCents === null ? (
+            <span className="text-zinc-400 dark:text-zinc-500">—</span>
+          ) : (
+            <span className="font-mono tabular-nums">{formatUsdFromCents(row.netPnlCents)}</span>
+          )}
+        </FieldLine>
         <FieldLine label="Session">
           <PillList items={splitMultiValue(row.session)} fieldKey="session" align="start" />
         </FieldLine>
@@ -277,6 +319,7 @@ function EodMobileRowCard({ row }: { row: EodTrackerRow }) {
 
 const SORTABLE: { column: EodSortColumn; label: string }[] = [
   { column: "weekday", label: "Weekday" },
+  { column: "broker", label: "Account" },
   { column: "session", label: "Session" },
   { column: "timeframeEof", label: "Timeframe EOF" },
   { column: "poi", label: "Point of Interest" },
@@ -284,6 +327,7 @@ const SORTABLE: { column: EodSortColumn; label: string }[] = [
   { column: "position", label: "Pos." },
   { column: "riskType", label: "Risk" },
   { column: "result", label: "Result" },
+  { column: "pnl", label: "Net P&L" },
   { column: "rrr", label: "RRR" },
   { column: "timeRange", label: "Time" },
   { column: "entryTf", label: "Entry" },
@@ -351,13 +395,17 @@ function monthLabel(ym: string): string {
 
 export function EodTrackerView({
   rows,
+  tradingAccounts,
   initialJournalMonth,
+  serverToday,
   openAiConfigured,
   summarizeUnrestricted,
 }: {
   rows: EodTrackerRow[];
+  tradingAccounts: EodTradingAccount[];
   /** From the server so the month picker matches SSR HTML on first paint. */
   initialJournalMonth: string;
+  serverToday: string;
   openAiConfigured: boolean;
   summarizeUnrestricted: boolean;
 }) {
@@ -430,17 +478,54 @@ export function EodTrackerView({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            EOD Tracker
+            Trading dashboard
           </h1>
           <p className="mt-1 max-w-2xl text-xs italic leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
-            &ldquo;The edge is not in calling every move—it is in showing up, logging the
-            session, and refining tomorrow with what you learned today.&rdquo;
+            End-of-day journal, broker-level performance, and a P&amp;L calendar tied to the same
+            rows—log structure and dollars in one place.
           </p>
         </div>
         <div className="flex w-full shrink-0 justify-stretch sm:w-auto sm:justify-end">
-          <AddEodLauncher />
+          <AddEodLauncher tradingAccounts={tradingAccounts} />
         </div>
       </div>
+
+      <section
+        id={EOD_SECTION_IDS.accounts}
+        aria-label="Trading accounts"
+        className="scroll-mt-14 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40"
+      >
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-zinc-500 dark:text-zinc-500">
+            Accounts
+          </p>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            Broker performance
+          </h2>
+        </div>
+        <TradingAccountsSection rows={rows} tradingAccounts={tradingAccounts} />
+      </section>
+
+      <section
+        id={EOD_SECTION_IDS.pnlCalendar}
+        aria-label="Profit and loss calendar"
+        className="scroll-mt-14 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40"
+      >
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-zinc-500 dark:text-zinc-500">
+            PnL calendar
+          </p>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            Monthly net P&amp;L
+          </h2>
+        </div>
+        <PnlCalendar
+          rows={rows}
+          tradingAccounts={tradingAccounts}
+          initialMonth={initialJournalMonth}
+          serverToday={serverToday}
+        />
+      </section>
 
       <section
         id={EOD_SECTION_IDS.journalTable}
@@ -507,27 +592,29 @@ export function EodTrackerView({
               <>
                 <ul className="flex list-none flex-col gap-3 md:hidden">
                   {displayRows.map((row) => (
-                    <EodMobileRowCard key={row.id} row={row} />
+                    <EodMobileRowCard key={row.id} row={row} tradingAccounts={tradingAccounts} />
                   ))}
                 </ul>
                 <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 md:block">
-                  <table className="w-full min-w-[72rem] table-fixed border-collapse text-center text-xs">
+                  <table className="w-full min-w-[80rem] table-fixed border-collapse text-center text-xs">
                     <colgroup>
-                      <col className="w-[8%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
                       <col className="w-[6%]" />
                       <col className="w-[5%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[7%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[6%]" />
                       <col className="w-[6%]" />
                       <col className="w-[5%]" />
                       <col className="w-[4%]" />
-                      <col className="w-[11%]" />
+                      <col className="w-[10%]" />
                       <col className="w-[6%]" />
-                      <col className="w-[7%]" />
                       <col className="w-[6%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[5%]" />
                     </colgroup>
                     <thead className="bg-zinc-100/95 text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-400">
                       <tr className="[&>th]:border-b [&>th]:border-zinc-200 [&>th]:px-2.5 [&>th]:py-2.5 [&>th]:text-center [&>th]:align-bottom [&>th]:font-medium [&>th]:leading-snug [&>th]:whitespace-normal dark:[&>th]:border-zinc-800 sm:[&>th]:px-3 md:[&>th]:px-3.5">
@@ -562,6 +649,11 @@ export function EodTrackerView({
                             <td className="whitespace-nowrap">
                               <PillOne value={weekday} fieldKey="weekday" />
                             </td>
+                            <td className="min-w-0 text-center text-zinc-700 dark:text-zinc-300">
+                              {row.tradingAccountName ?? (
+                                <span className="text-zinc-400 dark:text-zinc-500">—</span>
+                              )}
+                            </td>
                             <td>
                               <PillList items={splitMultiValue(row.session)} fieldKey="session" />
                             </td>
@@ -582,6 +674,13 @@ export function EodTrackerView({
                             </td>
                             <td>
                               <PillList items={row.result} fieldKey="result" />
+                            </td>
+                            <td className="font-mono tabular-nums text-zinc-800 dark:text-zinc-200">
+                              {row.netPnlCents === null ? (
+                                <span className="text-zinc-400 dark:text-zinc-500">—</span>
+                              ) : (
+                                formatUsdFromCents(row.netPnlCents)
+                              )}
                             </td>
                             <td>
                               <PillList items={splitMultiValue(row.rrr)} fieldKey="rrr" />
@@ -616,6 +715,7 @@ export function EodTrackerView({
                               <div className="flex flex-wrap justify-center">
                                 <EodRowManageActions
                                   rowId={row.id}
+                                  tradingAccounts={tradingAccounts}
                                   initial={{
                                     tradeDate: row.tradeDate.slice(0, 10),
                                     session: row.session,
@@ -630,6 +730,8 @@ export function EodTrackerView({
                                     entryTf: row.entryTf,
                                     remarks: row.remarks,
                                     notionUrl: row.notionUrl,
+                                    tradingAccountId: row.tradingAccountId,
+                                    netPnlCents: row.netPnlCents,
                                   }}
                                 />
                               </div>
