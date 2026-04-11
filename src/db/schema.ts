@@ -355,8 +355,12 @@ export const eodTradingAccounts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /** Starting balance in USD minor units (cents). */
-    initialCapitalCents: integer("initial_capital_cents").notNull().default(0),
+    /**
+     * Legacy cleartext cents when encryption is off or before backfill.
+     * Prefer `initial_capital_payload` when set (encrypted at rest).
+     */
+    initialCapitalCents: integer("initial_capital_cents"),
+    initialCapitalPayload: text("initial_capital_payload"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -374,8 +378,12 @@ export const eodTrackerRows = pgTable("eod_tracker_row", {
   tradingAccountId: uuid("trading_account_id").references(() => eodTradingAccounts.id, {
     onDelete: "set null",
   }),
-  /** Net P&L for this journal row in USD cents; null when not logged. */
+  /**
+   * Legacy cleartext cents when encryption is off or before backfill.
+   * Prefer `net_pnl_payload` when set (encrypted at rest).
+   */
   netPnlCents: integer("net_pnl_cents"),
+  netPnlPayload: text("net_pnl_payload"),
   /** Trade / journal date (weekday + date column derive from this). */
   tradeDate: timestamp("trade_date", { withTimezone: true }).notNull().defaultNow(),
   session: text("session").notNull().default(""),

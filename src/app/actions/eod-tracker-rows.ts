@@ -17,6 +17,7 @@ import {
   EOD_TIMEFRAME_EOF_OPTIONS,
   EOD_TREND_OPTIONS,
 } from "@/lib/eod-tracker-options";
+import { openTradingCents, persistTradingCents } from "@/lib/eod-money-crypto";
 import { getSessionUserId } from "@/lib/session";
 
 function errorText(error: unknown): string {
@@ -204,6 +205,7 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
         id: eodTrackerRows.id,
         tradingAccountId: eodTrackerRows.tradingAccountId,
         netPnlCents: eodTrackerRows.netPnlCents,
+        netPnlPayload: eodTrackerRows.netPnlPayload,
         tradeDate: eodTrackerRows.tradeDate,
         session: eodTrackerRows.session,
         timeframeEofJson: eodTrackerRows.timeframeEofJson,
@@ -228,7 +230,7 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
     const mapped = rows.map((r) => ({
       id: r.id,
       tradingAccountId: r.tradingAccountId ?? null,
-      netPnlCents: r.netPnlCents ?? null,
+      netPnlCents: openTradingCents(userId, r.netPnlPayload, r.netPnlCents),
       tradingAccountName: r.tradingAccountName ?? null,
       tradeDate: r.tradeDate.toISOString(),
       session: r.session,
@@ -284,6 +286,7 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
         id: eodTrackerRows.id,
         tradingAccountId: eodTrackerRows.tradingAccountId,
         netPnlCents: eodTrackerRows.netPnlCents,
+        netPnlPayload: eodTrackerRows.netPnlPayload,
         tradeDate: eodTrackerRows.tradeDate,
         session: eodTrackerRows.session,
         timeframeEofJson: eodTrackerRows.timeframeEofJson,
@@ -309,7 +312,7 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
     return rows.map((r) => ({
       id: r.id,
       tradingAccountId: r.tradingAccountId ?? null,
-      netPnlCents: r.netPnlCents ?? null,
+      netPnlCents: openTradingCents(userId, r.netPnlPayload, r.netPnlCents),
       tradingAccountName: r.tradingAccountName ?? null,
       tradeDate: r.tradeDate.toISOString(),
       session: r.session,
@@ -363,11 +366,13 @@ export async function createEodTrackerRowWithData(
   }
 
   const d = parsed.data;
+  const pnl = persistTradingCents(userId, d.netPnlCents ?? null);
   const values = {
     userId,
     tradeDate: tradeDateFromInput(d.tradeDate),
     tradingAccountId: d.tradingAccountId ?? null,
-    netPnlCents: d.netPnlCents ?? null,
+    netPnlCents: pnl.netPnlCents,
+    netPnlPayload: pnl.netPnlPayload,
     session: d.session,
     timeframeEofJson: JSON.stringify(d.timeframeEof),
     poiJson: JSON.stringify(d.poi),
@@ -442,13 +447,15 @@ export async function updateEodTrackerRowWithData(
     return { error: msg };
   }
   const d = parsed.data;
+  const pnl = persistTradingCents(userId, d.netPnlCents ?? null);
   try {
     const updated = await getDb()
       .update(eodTrackerRows)
       .set({
         tradeDate: tradeDateFromInput(d.tradeDate),
         tradingAccountId: d.tradingAccountId ?? null,
-        netPnlCents: d.netPnlCents ?? null,
+        netPnlCents: pnl.netPnlCents,
+        netPnlPayload: pnl.netPnlPayload,
         session: d.session,
         timeframeEofJson: JSON.stringify(d.timeframeEof),
         poiJson: JSON.stringify(d.poi),

@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { eodTradingAccounts } from "@/db/schema";
+import {
+  openInitialCapitalCents,
+  persistInitialCapitalCents,
+} from "@/lib/eod-money-crypto";
 import { getSessionUserId } from "@/lib/session";
 
 const upsertSchema = z.object({
@@ -29,6 +33,7 @@ export async function listEodTradingAccounts(): Promise<EodTradingAccount[]> {
         id: eodTradingAccounts.id,
         name: eodTradingAccounts.name,
         initialCapitalCents: eodTradingAccounts.initialCapitalCents,
+        initialCapitalPayload: eodTradingAccounts.initialCapitalPayload,
         createdAt: eodTradingAccounts.createdAt,
         updatedAt: eodTradingAccounts.updatedAt,
       })
@@ -38,7 +43,11 @@ export async function listEodTradingAccounts(): Promise<EodTradingAccount[]> {
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      initialCapitalCents: r.initialCapitalCents,
+      initialCapitalCents: openInitialCapitalCents(
+        userId,
+        r.initialCapitalPayload,
+        r.initialCapitalCents,
+      ),
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
@@ -57,12 +66,14 @@ export async function createEodTradingAccount(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   try {
+    const cap = persistInitialCapitalCents(userId, parsed.data.initialCapitalCents);
     const [row] = await getDb()
       .insert(eodTradingAccounts)
       .values({
         userId,
         name: parsed.data.name,
-        initialCapitalCents: parsed.data.initialCapitalCents,
+        initialCapitalCents: cap.initialCapitalCents,
+        initialCapitalPayload: cap.initialCapitalPayload,
       })
       .returning({ id: eodTradingAccounts.id });
     if (!row) return { error: "Could not create account" };
@@ -91,11 +102,13 @@ export async function updateEodTradingAccount(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   try {
+    const cap = persistInitialCapitalCents(userId, parsed.data.initialCapitalCents);
     const updated = await getDb()
       .update(eodTradingAccounts)
       .set({
         name: parsed.data.name,
-        initialCapitalCents: parsed.data.initialCapitalCents,
+        initialCapitalCents: cap.initialCapitalCents,
+        initialCapitalPayload: cap.initialCapitalPayload,
         updatedAt: new Date(),
       })
       .where(and(eq(eodTradingAccounts.id, id), eq(eodTradingAccounts.userId, userId)))

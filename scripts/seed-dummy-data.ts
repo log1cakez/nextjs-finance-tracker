@@ -30,6 +30,10 @@ import {
   encryptFinancePlaintext,
 } from "../src/lib/finance-field-crypto";
 import { normalizeCategoryNameKey } from "../src/lib/category-name";
+import {
+  persistInitialCapitalCents,
+  persistTradingCents,
+} from "../src/lib/eod-money-crypto";
 import { encryptTransactionPayload } from "../src/lib/transaction-crypto";
 
 config({ path: ".env.local" });
@@ -405,14 +409,17 @@ function buildEodSeedRows(
     },
   ];
 
-  return specs.map((s, i) => ({
+  return specs.map((s, i) => {
+    const pnl = persistTradingCents(userId, seedNetPnlCentsForResult(s.result));
+    return {
     userId,
     tradeDate: daysAgo(s.daysAgo),
     tradingAccountId:
       tradingAccountIds.length > 0
         ? tradingAccountIds[i % tradingAccountIds.length]!
         : null,
-    netPnlCents: seedNetPnlCentsForResult(s.result),
+    netPnlCents: pnl.netPnlCents,
+    netPnlPayload: pnl.netPnlPayload,
     session: s.session,
     timeframeEofJson: JSON.stringify(s.timeframeEof),
     poiJson: JSON.stringify(s.poi),
@@ -425,7 +432,8 @@ function buildEodSeedRows(
     entryTf: s.entryTf,
     remarks: s.remarks,
     notionUrl: s.notionUrl ?? "",
-  }));
+  };
+  });
 }
 
 async function seedEodTrackerRows(
@@ -461,12 +469,13 @@ async function seedEodTrackerRows(
       .map((a) => a.id);
   } else {
     try {
+      const cap = persistInitialCapitalCents(userId, 100_00);
       const inserted = await db
         .insert(eodTradingAccounts)
         .values([
-          { userId, name: `Seed Binance ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
-          { userId, name: `Seed Bingx ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
-          { userId, name: `Seed Bybit ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
+          { userId, name: `Seed Binance ${EOD_SEED_MARKER}`, ...cap },
+          { userId, name: `Seed Bingx ${EOD_SEED_MARKER}`, ...cap },
+          { userId, name: `Seed Bybit ${EOD_SEED_MARKER}`, ...cap },
         ])
         .returning({ id: eodTradingAccounts.id });
       tradingAccountIds = inserted.map((r) => r.id);
