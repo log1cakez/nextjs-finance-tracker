@@ -35,21 +35,32 @@ export type AddEodModalProps = {
 type TimeFormatMode = "24h" | "12h";
 
 function to12hParts(value24: string): { hh: string; mm: string; period: "AM" | "PM" } {
-  if (!value24 || !/^\d{2}:\d{2}$/.test(value24)) return { hh: "12", mm: "00", period: "AM" };
-  const [hStr, mm] = value24.split(":");
+  const t = value24.trim();
+  if (!t || !/^\d{2}:\d{2}$/.test(t)) return { hh: "", mm: "", period: "AM" };
+  const [hStr, mmRaw] = t.split(":");
+  const mm = (mmRaw ?? "00").padStart(2, "0").slice(0, 2);
   const h = Number(hStr);
-  return { hh: String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0"), mm, period: h >= 12 ? "PM" : "AM" };
+  if (!Number.isFinite(h) || h < 0 || h > 23) return { hh: "", mm: "", period: "AM" };
+  return {
+    hh: String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0"),
+    mm,
+    period: h >= 12 ? "PM" : "AM",
+  };
 }
 
 function to24h(hh12: string, mm: string, period: "AM" | "PM"): string {
+  if (!hh12.trim()) return "";
   const h = Number(hh12);
-  const m = Number(mm);
+  const m = mm.trim() === "" ? 0 : Number(mm);
   if (!Number.isFinite(h) || h < 1 || h > 12 || !Number.isFinite(m) || m < 0 || m > 59) return "";
   return `${String((h % 12) + (period === "PM" ? 12 : 0)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** Match `normalizeTimeRange` in `eod-tracker-rows` (ASCII + en/em dash). */
 function splitRange(v: string): { start: string; end: string } {
-  const p = v.split("-").map((x) => x.trim()).filter(Boolean);
+  const t = v.trim();
+  if (!t) return { start: "", end: "" };
+  const p = t.split(/\s*[-–—]\s*/).map((x) => x.trim()).filter(Boolean);
   return { start: p[0] ?? "", end: p[1] ?? "" };
 }
 
@@ -58,12 +69,13 @@ const MINUTE_OPTIONS = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "4
 const MINUTES_24H = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 const MULTI_VALUE_DELIMITER = " | ";
 
-/** Parse HH:MM (24h) for 24h picker selects; empty/invalid → defaults for display. */
+/** Parse HH:MM (24h) for 24h picker selects; empty/invalid → unset (not midnight). */
 function parse24Parts(v: string): { hh: string; mm: string } {
-  if (v && /^\d{2}:\d{2}$/.test(v)) {
-    return { hh: v.slice(0, 2), mm: v.slice(3, 5) };
+  const t = v.trim();
+  if (t && /^\d{2}:\d{2}$/.test(t)) {
+    return { hh: t.slice(0, 2), mm: t.slice(3, 5) };
   }
-  return { hh: "00", mm: "00" };
+  return { hh: "", mm: "" };
 }
 
 function to24HourString(hh: string, mm: string): string {
@@ -291,11 +303,29 @@ export function AddEodModal({
                 {(["start", "end"] as const).map((slot) => {
                   const v = slot === "start" ? startTime : endTime;
                   const { hh, mm } = parse24Parts(v);
-                  const setParts = (nextH: string, nextM: string) => {
+                  const clearSlot = () => {
+                    if (slot === "start") setStartTime("");
+                    else setEndTime("");
+                  };
+                  const apply24 = (nextH: string, nextM: string) => {
                     const cv = to24HourString(nextH, nextM);
+                    if (!cv) return;
                     if (slot === "start") setStartTime(cv);
                     else setEndTime(cv);
                   };
+                  const setHour = (nextH: string) => {
+                    if (nextH === "") return clearSlot();
+                    const m = mm === "" ? "00" : mm;
+                    apply24(nextH, m);
+                  };
+                  const setMinute = (nextM: string) => {
+                    if (nextM === "") return clearSlot();
+                    const h = hh === "" ? "00" : hh;
+                    apply24(h, nextM);
+                  };
+                  const hourValue = hh === "" ? "" : hh;
+                  const minuteValue =
+                    mm === "" ? "" : MINUTES_24H.includes(mm) ? mm : "";
                   return (
                     <div
                       key={slot}
@@ -306,11 +336,12 @@ export function AddEodModal({
                       </p>
                       <div className="mx-auto grid max-w-[12rem] grid-cols-2 gap-1">
                         <select
-                          value={hh}
-                          onChange={(e) => setParts(e.target.value, mm)}
+                          value={hourValue}
+                          onChange={(e) => setHour(e.target.value)}
                           className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                           aria-label={slot === "start" ? "Start hour (24h)" : "End hour (24h)"}
                         >
+                          <option value="">—</option>
                           {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map((h) => (
                             <option key={h} value={h}>
                               {h}
@@ -318,11 +349,12 @@ export function AddEodModal({
                           ))}
                         </select>
                         <select
-                          value={MINUTES_24H.includes(mm) ? mm : "00"}
-                          onChange={(e) => setParts(hh, e.target.value)}
+                          value={minuteValue}
+                          onChange={(e) => setMinute(e.target.value)}
                           className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                           aria-label={slot === "start" ? "Start minutes" : "End minutes"}
                         >
+                          <option value="">—</option>
                           {MINUTES_24H.map((m) => (
                             <option key={m} value={m}>
                               {m}
@@ -339,10 +371,34 @@ export function AddEodModal({
                 {(["start", "end"] as const).map((slot) => {
                   const v = slot === "start" ? startTime : endTime;
                   const p = to12hParts(v);
-                  const setV = (next: { hh?: string; mm?: string; period?: "AM" | "PM" }) => {
-                    const cv = to24h(next.hh ?? p.hh, next.mm ?? p.mm, next.period ?? p.period);
-                    if (slot === "start") setStartTime(cv); else setEndTime(cv);
+                  const clearSlot = () => {
+                    if (slot === "start") setStartTime("");
+                    else setEndTime("");
                   };
+                  const apply12 = (nh: string, nm: string, pd: "AM" | "PM") => {
+                    const cv = to24h(nh, nm, pd);
+                    if (!cv) return;
+                    if (slot === "start") setStartTime(cv);
+                    else setEndTime(cv);
+                  };
+                  const setHour12 = (nh: string) => {
+                    if (nh === "") return clearSlot();
+                    const nm = p.mm === "" ? "00" : p.mm;
+                    apply12(nh, nm, p.period);
+                  };
+                  const setMinute12 = (nm: string) => {
+                    if (nm === "") return clearSlot();
+                    const nh = p.hh === "" ? "12" : p.hh;
+                    apply12(nh, nm, p.period);
+                  };
+                  const setPeriod12 = (pd: "AM" | "PM") => {
+                    const nh = p.hh === "" ? "12" : p.hh;
+                    const nm = p.mm === "" ? "00" : p.mm;
+                    apply12(nh, nm, pd);
+                  };
+                  const minuteOk = (m: string) => (MINUTE_OPTIONS as readonly string[]).includes(m);
+                  const hourValue = p.hh === "" ? "" : p.hh;
+                  const minuteValue = p.mm === "" || !minuteOk(p.mm) ? "" : p.mm;
                   return (
                     <div
                       key={slot}
@@ -353,10 +409,12 @@ export function AddEodModal({
                       </p>
                       <div className="grid grid-cols-3 gap-1">
                         <select
-                          value={p.hh}
-                          onChange={(e) => setV({ hh: e.target.value })}
+                          value={hourValue}
+                          onChange={(e) => setHour12(e.target.value)}
                           className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                          aria-label={slot === "start" ? "Start hour (12h)" : "End hour (12h)"}
                         >
+                          <option value="">—</option>
                           {Array.from({ length: 12 }).map((_, i) => {
                             const h = String(i + 1).padStart(2, "0");
                             return (
@@ -367,10 +425,12 @@ export function AddEodModal({
                           })}
                         </select>
                         <select
-                          value={p.mm}
-                          onChange={(e) => setV({ mm: e.target.value })}
+                          value={minuteValue}
+                          onChange={(e) => setMinute12(e.target.value)}
                           className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                          aria-label={slot === "start" ? "Start minutes (12h)" : "End minutes (12h)"}
                         >
+                          <option value="">—</option>
                           {MINUTE_OPTIONS.map((m) => (
                             <option key={m} value={m}>
                               {m}
@@ -379,8 +439,9 @@ export function AddEodModal({
                         </select>
                         <select
                           value={p.period}
-                          onChange={(e) => setV({ period: e.target.value as "AM" | "PM" })}
+                          onChange={(e) => setPeriod12(e.target.value as "AM" | "PM")}
                           className="min-h-10 touch-manipulation rounded border border-zinc-300 bg-white px-2 py-1 text-center text-xs text-zinc-900 sm:min-h-0 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                          aria-label={slot === "start" ? "Start AM/PM" : "End AM/PM"}
                         >
                           <option value="AM">AM</option>
                           <option value="PM">PM</option>

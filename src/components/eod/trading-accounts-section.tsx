@@ -143,10 +143,12 @@ function ManageTradingAccountsModal({
   const [name, setName] = useState("");
   const [initialUsd, setInitialUsd] = useState("100.00");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteArmedId, setDeleteArmedId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editInitialUsd, setEditInitialUsd] = useState("");
 
   const startEdit = (a: EodTradingAccount) => {
+    setDeleteArmedId(null);
     setEditingId(a.id);
     setEditName(a.name);
     setEditInitialUsd(centsToInputString(a.initialCapitalCents));
@@ -211,7 +213,6 @@ function ManageTradingAccountsModal({
   };
 
   const remove = (id: string) => {
-    if (!window.confirm("Delete this account? Journal rows will be unlinked from it.")) return;
     startTransition(async () => {
       const res = await deleteEodTradingAccount(id);
       if ("error" in res) {
@@ -221,9 +222,17 @@ function ManageTradingAccountsModal({
           message: res.error,
           timeoutMs: 6500,
         });
+        setDeleteArmedId(null);
         return;
       }
+      setDeleteArmedId(null);
       if (editingId === id) setEditingId(null);
+      showToast({
+        kind: "success",
+        title: "Account removed",
+        message: "Linked journal rows were unlinked.",
+        timeoutMs: 2800,
+      });
       onChanged();
     });
   };
@@ -324,7 +333,7 @@ function ManageTradingAccountsModal({
                       Initial {formatUsdFromCents(a.initialCapitalCents)}
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     <button
                       type="button"
                       onClick={() => startEdit(a)}
@@ -332,14 +341,35 @@ function ManageTradingAccountsModal({
                     >
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => remove(a.id)}
-                      className="rounded-md border border-red-300 px-2 py-1 text-[11px] text-red-700 dark:border-red-900/50 dark:text-red-300"
-                    >
-                      Delete
-                    </button>
+                    {deleteArmedId === a.id ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => setDeleteArmedId(null)}
+                          className="rounded-md border border-zinc-300 px-2 py-1 text-[11px] dark:border-zinc-600"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => remove(a.id)}
+                          className="rounded-md border border-red-400 bg-red-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                        >
+                          {pending ? "…" : "Confirm delete"}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => setDeleteArmedId(a.id)}
+                        className="rounded-md border border-red-300 px-2 py-1 text-[11px] text-red-700 dark:border-red-900/50 dark:text-red-300"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
