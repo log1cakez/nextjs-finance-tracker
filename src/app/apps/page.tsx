@@ -9,7 +9,7 @@ const apps = [
   },
   {
     href: "/eod-tracker",
-    title: "EOD Tracker",
+    title: "Trading dashboard",
     description: "Log end-of-day entries and link out to Notion pages.",
   },
 ];

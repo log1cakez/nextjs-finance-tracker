@@ -5,15 +5,20 @@ import {
   deleteEodTrackerRow,
   type CreateEodRowInput,
 } from "@/app/actions/eod-tracker-rows";
+import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
+import { useCenterToast } from "@/components/center-toast";
 import { EditEodModal } from "@/components/eod/edit-eod-modal";
 
 export function EodRowManageActions({
   rowId,
   initial,
+  tradingAccounts,
 }: {
   rowId: string;
   initial: CreateEodRowInput;
+  tradingAccounts: EodTradingAccount[];
 }) {
+  const { showToast } = useCenterToast();
   const [open, setOpen] = useState(false);
   const [pendingDelete, startDelete] = useTransition();
 
@@ -34,7 +39,12 @@ export function EodRowManageActions({
           startDelete(async () => {
             const res = await deleteEodTrackerRow(rowId);
             if ("error" in res) {
-              window.alert(res.error);
+              showToast({
+                kind: "error",
+                title: "Could not delete row",
+                message: res.error,
+                timeoutMs: 6500,
+              });
               return;
             }
             window.location.reload();
@@ -48,6 +58,7 @@ export function EodRowManageActions({
         open={open}
         onClose={() => setOpen(false)}
         initial={{ rowId, ...initial }}
+        tradingAccounts={tradingAccounts}
         onSaved={() => window.location.reload()}
       />
     </div>

@@ -6,6 +6,8 @@ import {
   createEodTrackerRowWithData,
   type CreateEodRowInput,
 } from "@/app/actions/eod-tracker-rows";
+import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
+import { centsToInputString, parseUsdToCents } from "@/lib/eod-money";
 import {
   EOD_ENTRY_TF_OPTIONS,
   EOD_POI_OPTIONS,
@@ -17,6 +19,7 @@ import {
   EOD_TIMEFRAME_EOF_OPTIONS,
   EOD_TREND_OPTIONS,
 } from "@/lib/eod-tracker-options";
+import { useCenterToast } from "@/components/center-toast";
 import { MultiTagPicker } from "@/components/eod/eod-tag-field";
 
 export type AddEodModalProps = {
@@ -26,6 +29,7 @@ export type AddEodModalProps = {
   initialData?: CreateEodRowInput;
   pending?: boolean;
   onSubmit?: (payload: CreateEodRowInput) => void;
+  tradingAccounts: EodTradingAccount[];
 };
 
 type TimeFormatMode = "24h" | "12h";
@@ -78,15 +82,41 @@ function splitMultiValue(raw: string): string[] {
     .filter(Boolean);
 }
 
-export function AddEodModal({ open, onClose, mode = "create", initialData, pending: externalPending = false, onSubmit }: AddEodModalProps) {
+export function AddEodModal({
+  open,
+  onClose,
+  mode = "create",
+  initialData,
+  pending: externalPending = false,
+  onSubmit,
+  tradingAccounts,
+}: AddEodModalProps) {
   const router = useRouter();
+  const { showToast } = useCenterToast();
   const [localPending, startTransition] = useTransition();
   const pending = localPending || externalPending;
   const today = new Date().toISOString().slice(0, 10);
-  const seed = useMemo<CreateEodRowInput>(() => initialData ?? {
-    tradeDate: today, session: "", timeframeEof: [], poi: [], trend: "", position: "",
-    riskType: "", result: [], rrr: "", timeRange: "", entryTf: "", remarks: "", notionUrl: "",
-  }, [initialData, today]);
+  const seed = useMemo<CreateEodRowInput>(
+    () =>
+      initialData ?? {
+        tradeDate: today,
+        session: "",
+        timeframeEof: [],
+        poi: [],
+        trend: "",
+        position: "",
+        riskType: "",
+        result: [],
+        rrr: "",
+        timeRange: "",
+        entryTf: "",
+        remarks: "",
+        notionUrl: "",
+        tradingAccountId: null,
+        netPnlCents: null,
+      },
+    [initialData, today],
+  );
 
   const [tradeDate, setTradeDate] = useState(seed.tradeDate);
   const [session, setSession] = useState<string[]>(splitMultiValue(seed.session));
@@ -103,24 +133,63 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
   const [entryTf, setEntryTf] = useState<string[]>(splitMultiValue(seed.entryTf));
   const [remarks, setRemarks] = useState(seed.remarks);
   const [notionUrl, setNotionUrl] = useState(seed.notionUrl);
+  const [tradingAccountId, setTradingAccountId] = useState<string | null>(
+    seed.tradingAccountId ?? null,
+  );
+  const [netPnlInput, setNetPnlInput] = useState(() => centsToInputString(seed.netPnlCents ?? null));
 
   const reset = useCallback(() => {
     setTradeDate(seed.tradeDate); setSession(splitMultiValue(seed.session)); setTimeframeEof(seed.timeframeEof); setPoi(seed.poi);
     setTrend(splitMultiValue(seed.trend)); setPosition(splitMultiValue(seed.position)); setRiskType(splitMultiValue(seed.riskType)); setResult(seed.result);
     setRrr(splitMultiValue(seed.rrr)); setTimeFormat("24h"); const t = splitRange(seed.timeRange); setStartTime(t.start); setEndTime(t.end);
     setEntryTf(splitMultiValue(seed.entryTf)); setRemarks(seed.remarks); setNotionUrl(seed.notionUrl);
+    setTradingAccountId(seed.tradingAccountId ?? null);
+    setNetPnlInput(centsToInputString(seed.netPnlCents ?? null));
   }, [seed]);
 
   useEffect(() => { if (open) reset(); }, [open, reset]);
   useEffect(() => { if (!open) return; const h = (e: KeyboardEvent) => e.key === "Escape" && onClose(); document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, [open, onClose]);
   if (!open) return null;
 
-  const payload: CreateEodRowInput = { tradeDate, session: session.join(MULTI_VALUE_DELIMITER), timeframeEof, poi, trend: trend.join(MULTI_VALUE_DELIMITER), position: position.join(MULTI_VALUE_DELIMITER), riskType: riskType.join(MULTI_VALUE_DELIMITER), result, rrr: rrr.join(MULTI_VALUE_DELIMITER), timeRange: startTime && endTime ? `${startTime}-${endTime}` : startTime || endTime || "", entryTf: entryTf.join(MULTI_VALUE_DELIMITER), remarks, notionUrl };
+  const payload: CreateEodRowInput = {
+    tradeDate,
+    session: session.join(MULTI_VALUE_DELIMITER),
+    timeframeEof,
+    poi,
+    trend: trend.join(MULTI_VALUE_DELIMITER),
+    position: position.join(MULTI_VALUE_DELIMITER),
+    riskType: riskType.join(MULTI_VALUE_DELIMITER),
+    result,
+    rrr: rrr.join(MULTI_VALUE_DELIMITER),
+    timeRange: startTime && endTime ? `${startTime}-${endTime}` : startTime || endTime || "",
+    entryTf: entryTf.join(MULTI_VALUE_DELIMITER),
+    remarks,
+    notionUrl,
+    tradingAccountId,
+    netPnlCents: parseUsdToCents(netPnlInput),
+  };
   const submit = () => {
+    if (netPnlInput.trim() && parseUsdToCents(netPnlInput) === null) {
+      showToast({
+        kind: "error",
+        title: "Invalid net P&L",
+        message: "Enter a valid dollar amount or leave the field blank.",
+        timeoutMs: 4200,
+      });
+      return;
+    }
     if (mode === "edit" && onSubmit) return onSubmit(payload);
     startTransition(async () => {
       const res = await createEodTrackerRowWithData(payload);
-      if ("error" in res) return window.alert(res.error);
+      if ("error" in res) {
+        showToast({
+          kind: "error",
+          title: "Could not save row",
+          message: res.error,
+          timeoutMs: 6500,
+        });
+        return;
+      }
       onClose(); reset(); router.refresh();
     });
   };
@@ -153,6 +222,41 @@ export function AddEodModal({ open, onClose, mode = "create", initialData, pendi
               onChange={(e) => setTradeDate(e.target.value)}
               className="eod-modal-date min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Trading account
+            </span>
+            <select
+              value={tradingAccountId ?? ""}
+              onChange={(e) => setTradingAccountId(e.target.value || null)}
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <option value="">None</option>
+              {tradingAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <span className="block text-[11px] text-zinc-600 dark:text-zinc-500">
+              Optional. Used for the accounts table and P&amp;L calendar rollups.
+            </span>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Net P&amp;L (USD)
+            </span>
+            <input
+              value={netPnlInput}
+              onChange={(e) => setNetPnlInput(e.target.value)}
+              inputMode="decimal"
+              placeholder="e.g. 125.50 or -40"
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-center font-mono text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+            />
+            <span className="block text-[11px] text-zinc-600 dark:text-zinc-500">
+              Optional. Leave blank if you are journaling structure only.
+            </span>
           </label>
           <MultiTagPicker label="Session" fieldKey="session" options={EOD_SESSION_OPTIONS} values={session} onChange={setSession} />
           <MultiTagPicker label="Timeframe EOF" fieldKey="timeframeEof" options={EOD_TIMEFRAME_EOF_OPTIONS} values={timeframeEof} onChange={setTimeframeEof} />

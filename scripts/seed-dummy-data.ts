@@ -17,6 +17,7 @@ import {
   categories,
   categoryDefinitions,
   eodTrackerRows,
+  eodTradingAccounts,
   financialAccounts,
   lendingPayments,
   lendings,
@@ -110,7 +111,17 @@ type EodSeedSpec = {
   notionUrl?: string;
 };
 
-function buildEodSeedRows(userId: string): InferInsertModel<typeof eodTrackerRows>[] {
+function seedNetPnlCentsForResult(result: string[]): number | null {
+  if (result.includes("Win")) return 150_00;
+  if (result.includes("Loss")) return -78_00;
+  if (result.includes("Break Even")) return 0;
+  return null;
+}
+
+function buildEodSeedRows(
+  userId: string,
+  tradingAccountIds: string[],
+): InferInsertModel<typeof eodTrackerRows>[] {
   const specs: EodSeedSpec[] = [
     {
       daysAgo: 1,
@@ -394,9 +405,14 @@ function buildEodSeedRows(userId: string): InferInsertModel<typeof eodTrackerRow
     },
   ];
 
-  return specs.map((s) => ({
+  return specs.map((s, i) => ({
     userId,
     tradeDate: daysAgo(s.daysAgo),
+    tradingAccountId:
+      tradingAccountIds.length > 0
+        ? tradingAccountIds[i % tradingAccountIds.length]!
+        : null,
+    netPnlCents: seedNetPnlCentsForResult(s.result),
     session: s.session,
     timeframeEofJson: JSON.stringify(s.timeframeEof),
     poiJson: JSON.stringify(s.poi),
@@ -432,7 +448,36 @@ async function seedEodTrackerRows(
     }
   }
 
-  const rows = buildEodSeedRows(userId);
+  let tradingAccountIds: string[] = [];
+  const existingTrading = await db
+    .select({ id: eodTradingAccounts.id, name: eodTradingAccounts.name })
+    .from(eodTradingAccounts)
+    .where(
+      and(eq(eodTradingAccounts.userId, userId), like(eodTradingAccounts.name, `%${EOD_SEED_MARKER}%`)),
+    );
+  if (existingTrading.length >= 3) {
+    tradingAccountIds = existingTrading
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((a) => a.id);
+  } else {
+    try {
+      const inserted = await db
+        .insert(eodTradingAccounts)
+        .values([
+          { userId, name: `Seed Binance ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
+          { userId, name: `Seed Bingx ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
+          { userId, name: `Seed Bybit ${EOD_SEED_MARKER}`, initialCapitalCents: 100_00 },
+        ])
+        .returning({ id: eodTradingAccounts.id });
+      tradingAccountIds = inserted.map((r) => r.id);
+    } catch {
+      console.warn(
+        "Could not insert seed trading accounts (run db:migrate / db:push). EOD rows will omit broker/PnL.",
+      );
+    }
+  }
+
+  const rows = buildEodSeedRows(userId, tradingAccountIds);
   await db.insert(eodTrackerRows).values(rows);
   console.log(`Inserted ${rows.length} EOD tracker rows (${EOD_SEED_MARKER}).`);
 }
@@ -536,7 +581,7 @@ async function main() {
     if (!def) {
       throw new Error(`Failed to resolve category definition for ${spec.name}`);
     }
-    const [row] = await db
+    const inserted = await db
       .insert(categories)
       .values({
         userId,
@@ -544,7 +589,16 @@ async function main() {
         name: def.name,
         kind: spec.kind,
       })
+      .onConflictDoNothing({
+        target: [categories.userId, categories.definitionId],
+      })
       .returning({ id: categories.id, kind: categories.kind });
+    const row =
+      inserted[0] ??
+      (await db.query.categories.findFirst({
+        where: and(eq(categories.userId, userId), eq(categories.definitionId, def.id)),
+        columns: { id: true, kind: true },
+      }));
     if (row) catRows.push(row);
   }
 
