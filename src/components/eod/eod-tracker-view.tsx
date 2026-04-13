@@ -412,6 +412,7 @@ export function EodTrackerView({
   const [selectedMonth, setSelectedMonth] = useState(initialJournalMonth);
   const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
   const [showAllInTable, setShowAllInTable] = useState(false);
+  const [showAiReview, setShowAiReview] = useState(true);
 
   const handleSort = useCallback((column: EodSortColumn, additive: boolean) => {
     setSortRules((prev) => {
@@ -528,6 +529,58 @@ export function EodTrackerView({
       </section>
 
       <section
+        id={EOD_SECTION_IDS.analytics}
+        aria-label="Journal analytics"
+        className="scroll-mt-14 space-y-0"
+      >
+        <EodAnalyticsCharts rows={chartRows} />
+      </section>
+
+      <section
+        id={EOD_SECTION_IDS.aiReview}
+        aria-label="AI month review"
+        className="scroll-mt-14 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-zinc-500 dark:text-zinc-500">
+              AI summary
+            </p>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              AI month review
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAiReview((prev) => !prev)}
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            aria-expanded={showAiReview}
+            aria-controls="eod-ai-review-content"
+          >
+            {showAiReview ? "Hide" : "Show"}
+          </button>
+        </div>
+        {showAiReview ? (
+          <div id="eod-ai-review-content">
+            <EodAiAnalyticsPanel
+              month={selectedMonth}
+              journalDataStamp={journalDataStamp}
+              openAiConfigured={openAiConfigured}
+              summarizeUnrestricted={summarizeUnrestricted}
+              journalEntryCountForMonth={monthRows.length}
+            />
+          </div>
+        ) : (
+          <p
+            id="eod-ai-review-content"
+            className="text-xs text-zinc-600 dark:text-zinc-400"
+          >
+            AI month review is hidden.
+          </p>
+        )}
+      </section>
+
+      <section
         id={EOD_SECTION_IDS.journalTable}
         aria-label="EOD journal table"
         className="scroll-mt-14 space-y-4"
@@ -565,16 +618,15 @@ export function EodTrackerView({
               <p className="text-[11px] text-zinc-600 sm:max-w-md sm:text-right dark:text-zinc-500">
                 {showAllInTable ? (
                   <>
-                    Showing{" "}
-                    <span className="text-zinc-800 dark:text-zinc-400">all months</span>. AI review and
-                    charts below use{" "}
+                    Showing <span className="text-zinc-800 dark:text-zinc-400">all months</span>.
+                    Analytics and AI summary use{" "}
                     <span className="text-zinc-800 dark:text-zinc-400">{monthLabel(selectedMonth)}</span>.
                   </>
                 ) : (
                   <>
                     Showing entries in{" "}
                     <span className="text-zinc-800 dark:text-zinc-400">{monthLabel(selectedMonth)}</span>
-                    . AI review and charts below use this month.
+                    . Analytics and AI summary use this month.
                   </>
                 )}
               </p>
@@ -748,27 +800,6 @@ export function EodTrackerView({
         )}
       </section>
 
-      <section
-        id={EOD_SECTION_IDS.aiReview}
-        aria-label="AI month review"
-        className="scroll-mt-14 space-y-0"
-      >
-        <EodAiAnalyticsPanel
-          month={selectedMonth}
-          journalDataStamp={journalDataStamp}
-          openAiConfigured={openAiConfigured}
-          summarizeUnrestricted={summarizeUnrestricted}
-          journalEntryCountForMonth={monthRows.length}
-        />
-      </section>
-
-      <section
-        id={EOD_SECTION_IDS.analytics}
-        aria-label="Journal analytics"
-        className="scroll-mt-14 space-y-0"
-      >
-        <EodAnalyticsCharts rows={chartRows} />
-      </section>
     </div>
   );
 }

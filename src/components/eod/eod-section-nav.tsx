@@ -10,9 +10,9 @@ import { EOD_SECTION_IDS } from "@/lib/eod-section-ids";
 const ITEMS: { id: string; label: string }[] = [
   { id: EOD_SECTION_IDS.accounts, label: "Accounts" },
   { id: EOD_SECTION_IDS.pnlCalendar, label: "P&L calendar" },
-  { id: EOD_SECTION_IDS.journalTable, label: "Journal table" },
-  { id: EOD_SECTION_IDS.aiReview, label: "AI month review" },
   { id: EOD_SECTION_IDS.analytics, label: "Analytics" },
+  { id: EOD_SECTION_IDS.aiReview, label: "AI summary" },
+  { id: EOD_SECTION_IDS.journalTable, label: "EOD table" },
 ];
 
 export function EodSectionNav() {
