@@ -26,11 +26,23 @@ type ToastApi = {
 };
 
 const ToastContext = createContext<ToastApi | null>(null);
+let warnedMissingProvider = false;
+
+const noopToastApi: ToastApi = {
+  showToast: () => {
+    // no-op when provider is unavailable during render boundaries
+  },
+};
 
 export function useCenterToast(): ToastApi {
   const ctx = useContext(ToastContext);
   if (!ctx) {
-    throw new Error("useCenterToast must be used within CenterToastProvider");
+    if (!warnedMissingProvider && typeof window !== "undefined") {
+      warnedMissingProvider = true;
+      // eslint-disable-next-line no-console
+      console.warn("CenterToastProvider missing in tree; toasts are disabled for this render.");
+    }
+    return noopToastApi;
   }
   return ctx;
 }
