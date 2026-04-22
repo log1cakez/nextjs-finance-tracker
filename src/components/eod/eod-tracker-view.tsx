@@ -412,7 +412,7 @@ export function EodTrackerView({
   const [selectedMonth, setSelectedMonth] = useState(initialJournalMonth);
   const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
   const [showAllInTable, setShowAllInTable] = useState(false);
-  const [showAiReview, setShowAiReview] = useState(true);
+  const [showAiReview, setShowAiReview] = useState(false);
 
   const handleSort = useCallback((column: EodSortColumn, additive: boolean) => {
     setSortRules((prev) => {
@@ -465,6 +465,9 @@ export function EodTrackerView({
         result: r.result,
         trend: r.trend,
         position: r.position,
+        rrr: r.rrr,
+        timeRange: r.timeRange,
+        netPnlCents: r.netPnlCents,
       })),
     [monthRows],
   );

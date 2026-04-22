@@ -6,73 +6,261 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { useIsNarrow } from "@/hooks/use-is-narrow";
-import {
-  buildEodChartsModel,
-  type EodChartRange,
-  type EodChartRowInput,
-} from "@/lib/eod-chart-data";
+import { type EodChartRowInput } from "@/lib/eod-chart-data";
+import { formatUsdFromCents } from "@/lib/eod-money";
 
-const RANGE_OPTIONS: { id: EodChartRange; label: string }[] = [
-  { id: "3m", label: "3 months" },
-  { id: "6m", label: "6 months" },
-  { id: "12m", label: "12 months" },
-  { id: "all", label: "All time" },
-];
+const WEEKDAY_ORDER = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
 
-function ChartCard({
+const SESSION_ORDER = ["London", "New York", "Asia", "Out Of Session"] as const;
+const RR_RE = /-?\d+(\.\d+)?/;
+const MULTI_VALUE_DELIMITER = "|";
+
+function toWeekday(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+}
+
+function parseRr(value: string): number | null {
+  const matched = value.match(RR_RE)?.[0];
+  if (!matched) return null;
+  const num = Number(matched);
+  return Number.isFinite(num) ? num : null;
+}
+
+function ratioPercent(a: number, b: number): number {
+  if (b <= 0) return 0;
+  return (a / b) * 100;
+}
+
+function numberText(value: number, digits = 2): string {
+  return Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function splitMultiValue(raw: string): string[] {
+  return raw
+    .split(MULTI_VALUE_DELIMITER)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function normalizeSessionToken(token: string): string {
+  const t = token.trim().toLowerCase();
+  if (!t) return "";
+  if (t === "london" || t === "ldn") return "London";
+  if (t === "new york" || t === "newyork" || t === "ny") return "New York";
+  if (t === "asia" || t === "tokyo" || t === "sydney") return "Asia";
+  if (t === "out of session" || t === "oos") return "Out Of Session";
+  return token.trim();
+}
+
+function parseMinutesFromTimeRange(timeRange: string): number | null {
+  const m = timeRange.trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const sh = Number(m[1]);
+  const sm = Number(m[2]);
+  const eh = Number(m[3]);
+  const em = Number(m[4]);
+  if ([sh, sm, eh, em].some((v) => Number.isNaN(v))) return null;
+  let start = sh * 60 + sm;
+  let end = eh * 60 + em;
+  if (end < start) end += 24 * 60;
+  return Math.max(0, end - start);
+}
+
+function formatDuration(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "0m";
+  const d = Math.floor(minutes / (24 * 60));
+  const h = Math.floor((minutes % (24 * 60)) / 60);
+  const m = Math.floor(minutes % 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function TinyMetric({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] text-zinc-500 dark:text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+        {value}
+        {suffix ? <span className="ml-1 text-base font-medium">{suffix}</span> : null}
+      </p>
+    </div>
+  );
+}
+
+function InfoCard({
   title,
-  subtitle,
   children,
   className = "",
 }: {
   title: string;
-  subtitle?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <div
-      className={`overflow-hidden rounded-xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/90 ${className}`}
+    <section
+      className={`rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 ${className}`}
     >
-      <div className="border-b border-zinc-200/90 px-3 py-2.5 dark:border-zinc-800/80 sm:px-4">
-        <h3 className="text-xs font-semibold text-zinc-900 sm:text-sm dark:text-zinc-100">{title}</h3>
-        {subtitle ? (
-          <p className="mt-0.5 text-[10px] text-zinc-600 sm:text-xs dark:text-zinc-500">{subtitle}</p>
-        ) : null}
-      </div>
-      <div className="min-h-0 p-2 sm:p-3">{children}</div>
+      <h4 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{title}</h4>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function StatLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs">
+      <span className="text-zinc-500 dark:text-zinc-500">{label}</span>
+      <span className="font-medium text-zinc-800 dark:text-zinc-200">{value}</span>
     </div>
   );
 }
 
 export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
-  const [range, setRange] = useState<EodChartRange>("6m");
+  const [dayFilter, setDayFilter] = useState<string>("all");
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
   const narrow = useIsNarrow(640);
 
-  const model = useMemo(() => buildEodChartsModel(rows, range), [rows, range]);
+  const dayFilters = useMemo(() => {
+    const present = new Set(rows.map((r) => toWeekday(r.tradeDate)));
+    return [
+      { id: "all", label: "All" },
+      ...WEEKDAY_ORDER.filter((day) => present.has(day)).map((day) => ({ id: day, label: day })),
+    ];
+  }, [rows]);
 
-  const gridStroke = isDark ? "#3f3f46" : "#d4d4d8";
-  const axisColor = isDark ? "#a1a1aa" : "#52525b";
-  const barFill = isDark ? "#f59e0b" : "#d97706";
-  const barFill2 = isDark ? "#22d3ee" : "#0891b2";
+  const filteredRows = useMemo(
+    () => rows.filter((r) => (dayFilter === "all" ? true : toWeekday(r.tradeDate) === dayFilter)),
+    [rows, dayFilter],
+  );
 
-  const tooltipBox = isDark
-    ? "rounded-lg border border-zinc-600 bg-zinc-900/95 px-2.5 py-2 text-[11px] shadow-lg backdrop-blur-sm"
-    : "rounded-lg border border-zinc-300 bg-white/95 px-2.5 py-2 text-[11px] text-zinc-900 shadow-lg backdrop-blur-sm";
-  const tooltipTitle = isDark ? "font-medium text-zinc-200" : "font-medium text-zinc-900";
-  const tooltipMuted = isDark ? "tabular-nums text-zinc-400" : "tabular-nums text-zinc-600";
+  const totalTrades = filteredRows.length;
+  const totalPnlCents = filteredRows.reduce((sum, r) => sum + (r.netPnlCents ?? 0), 0);
+  const winTrades = filteredRows.filter((r) => r.result.includes("Win")).length;
+  const losingTrades = filteredRows.filter((r) => r.result.includes("Loss")).length;
+  const breakEvenTrades = filteredRows.filter((r) => r.result.includes("Break Even")).length;
+  const winRate = ratioPercent(winTrades, totalTrades);
+
+  const rrValues = filteredRows.map((r) => parseRr(r.rrr)).filter((v): v is number => v !== null);
+  const avgRr = rrValues.length ? rrValues.reduce((a, b) => a + b, 0) / rrValues.length : 0;
+  const maxRr = rrValues.length ? Math.max(...rrValues) : 0;
+  const winRrs = filteredRows
+    .filter((r) => r.result.includes("Win"))
+    .map((r) => parseRr(r.rrr))
+    .filter((v): v is number => v !== null);
+  const lossRrs = filteredRows
+    .filter((r) => r.result.includes("Loss"))
+    .map((r) => parseRr(r.rrr))
+    .filter((v): v is number => v !== null);
+  const bestWinRr = winRrs.length ? Math.max(...winRrs) : 0;
+  const avgWinRr = winRrs.length ? winRrs.reduce((a, b) => a + b, 0) / winRrs.length : 0;
+  const worstLossRr = lossRrs.length ? Math.min(...lossRrs) : 0;
+  const avgLossRr = lossRrs.length ? lossRrs.reduce((a, b) => a + b, 0) / lossRrs.length : 0;
+
+  const durationMinutes = filteredRows
+    .map((r) => parseMinutesFromTimeRange(r.timeRange))
+    .filter((v): v is number => v !== null);
+  const avgDuration = durationMinutes.length
+    ? durationMinutes.reduce((a, b) => a + b, 0) / durationMinutes.length
+    : 0;
+  const winDurationRows = filteredRows
+    .filter((r) => r.result.includes("Win"))
+    .map((r) => parseMinutesFromTimeRange(r.timeRange))
+    .filter((v): v is number => v !== null);
+  const loseDurationRows = filteredRows
+    .filter((r) => r.result.includes("Loss"))
+    .map((r) => parseMinutesFromTimeRange(r.timeRange))
+    .filter((v): v is number => v !== null);
+  const avgWinDuration = winDurationRows.length
+    ? winDurationRows.reduce((a, b) => a + b, 0) / winDurationRows.length
+    : 0;
+  const avgLossDuration = loseDurationRows.length
+    ? loseDurationRows.reduce((a, b) => a + b, 0) / loseDurationRows.length
+    : 0;
+  const tradeTimes = filteredRows.map((r) => new Date(r.tradeDate).getTime()).filter(Number.isFinite);
+  const accountAgeMinutes =
+    tradeTimes.length >= 2 ? (Math.max(...tradeTimes) - Math.min(...tradeTimes)) / 60000 : 0;
+
+  const dailyPerformance = useMemo(() => {
+    const map = new Map<string, { day: string; profit: number; loss: number }>();
+    for (const row of filteredRows) {
+      const day = toWeekday(row.tradeDate);
+      const existing = map.get(day) ?? { day, profit: 0, loss: 0 };
+      const v = row.netPnlCents ?? 0;
+      if (v >= 0) existing.profit += v / 100;
+      else existing.loss += v / 100;
+      map.set(day, existing);
+    }
+    return WEEKDAY_ORDER.map((day) => map.get(day) ?? { day, profit: 0, loss: 0 });
+  }, [filteredRows]);
+
+  const sessions = useMemo(() => {
+    const map = new Map<
+      string,
+      { totalTrades: number; wins: number; maxRr: number; profitCents: number }
+    >();
+    for (const row of filteredRows) {
+      const tokens = splitMultiValue(row.session).map(normalizeSessionToken).filter(Boolean);
+      const rowSessions = new Set(tokens.length ? tokens : ["Out Of Session"]);
+      for (const session of rowSessions) {
+        const existing = map.get(session) ?? {
+          totalTrades: 0,
+          wins: 0,
+          maxRr: 0,
+          profitCents: 0,
+        };
+        existing.totalTrades += 1;
+        if (row.result.includes("Win")) existing.wins += 1;
+        const rr = parseRr(row.rrr);
+        if (rr !== null) existing.maxRr = Math.max(existing.maxRr, rr);
+        existing.profitCents += row.netPnlCents ?? 0;
+        map.set(session, existing);
+      }
+    }
+
+    const ordered = [
+      ...SESSION_ORDER.filter((name) => map.has(name)),
+      ...[...map.keys()]
+        .filter((name) => !SESSION_ORDER.includes(name as (typeof SESSION_ORDER)[number]))
+        .sort((a, b) => a.localeCompare(b)),
+    ];
+
+    return ordered.map((session) => {
+      const data = map.get(session)!;
+      return {
+        session,
+        winRate: ratioPercent(data.wins, data.totalTrades),
+        totalTrades: data.totalTrades,
+        maxRr: data.maxRr,
+        profitUsd: data.profitCents / 100,
+      };
+    });
+  }, [filteredRows]);
 
   if (rows.length === 0) {
     return (
@@ -84,374 +272,226 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
           id="eod-charts-empty-heading"
           className="text-sm font-semibold text-zinc-900 dark:text-zinc-200"
         >
-          Journal analytics
+          Analytics dashboard
         </h2>
         <p className="mx-auto mt-2 max-w-md text-xs text-zinc-600 dark:text-zinc-500">
-          Add EOD entries to unlock charts: activity over time, result mix, sessions, weekdays, and
-          trend tags.
+          Add EOD entries to unlock the analytics dashboard.
         </p>
       </section>
     );
   }
 
-  const emptyRange = model.kpi.entries === 0;
-
   return (
     <section
-      className="space-y-3 rounded-xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/90 sm:p-5"
+      className="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/70 sm:p-5"
       aria-labelledby="eod-charts-heading"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2
-            id="eod-charts-heading"
-            className="text-sm font-semibold text-zinc-900 dark:text-zinc-100"
-          >
-            Journal analytics
-          </h2>
-          <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-500">
-            Visual breakdown of your logged sessions (filtered range applies to all charts).
-          </p>
-        </div>
-        <div
-          className="flex flex-wrap gap-1.5"
-          role="group"
-          aria-label="Chart time range"
-        >
-          {RANGE_OPTIONS.map((opt) => (
+      <div>
+        <h2 id="eod-charts-heading" className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          Analytics dashboard
+        </h2>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400">Check your performance for this session.</p>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Day Filters</p>
+        <div className="flex flex-wrap gap-2">
+          {dayFilters.map((day) => (
             <button
-              key={opt.id}
+              key={day.id}
               type="button"
-              onClick={() => setRange(opt.id)}
-              className={`min-h-9 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition sm:min-h-8 ${
-                range === opt.id
-                  ? "bg-amber-500/90 text-zinc-950"
-                  : "border border-zinc-300 bg-zinc-100 text-zinc-800 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-600"
+              onClick={() => setDayFilter(day.id)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                dayFilter === day.id
+                  ? "bg-rose-500 text-white"
+                  : "border border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
               }`}
             >
-              {opt.label}
+              {day.label}
             </button>
           ))}
         </div>
       </div>
 
-      {emptyRange ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200/90">
-          No entries in this range. Try <strong className="font-semibold">All time</strong> or a
-          wider window.
-        </p>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-            Entries
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-            {model.kpi.entries}
-          </p>
+      <section className="rounded-2xl bg-slate-900 p-4 text-white shadow-md">
+        <div>
+          <h3 className="text-lg font-semibold">Profit and Losses</h3>
+          <p className="text-xs text-slate-300">over time</p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-            Win rows
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-            {model.kpi.winRows}
-          </p>
+        <div className="mt-4 grid grid-cols-2 gap-4 text-white sm:grid-cols-4">
+          <div>
+            <p className="text-[11px] text-slate-300">Total PnL</p>
+            <p className="text-3xl font-semibold tracking-tight">{formatUsdFromCents(totalPnlCents)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-300">Account Balance</p>
+            <p className="text-3xl font-semibold tracking-tight">{formatUsdFromCents(totalPnlCents)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-300">Win rate</p>
+            <p className="text-3xl font-semibold tracking-tight">{numberText(winRate, 0)}%</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-300">Total Trades</p>
+            <p className="text-3xl font-semibold tracking-tight">{totalTrades}</p>
+          </div>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-            Loss rows
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-600 dark:text-red-400">
-            {model.kpi.lossRows}
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-            Active days
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-            {model.kpi.uniqueDays}
-          </p>
-        </div>
-      </div>
-
-      <ChartCard
-        title="Activity by month"
-        subtitle="Number of journal rows logged per month"
-        className="min-w-0"
-      >
-        <div className="h-52 w-full min-w-0 sm:h-60">
+        <div className="mt-4 h-56 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={model.monthlyActivity}
+              data={dailyPerformance}
               margin={
                 narrow
-                  ? { top: 6, right: 4, left: -18, bottom: 4 }
-                  : { top: 8, right: 8, left: -8, bottom: 4 }
+                  ? { top: 6, right: 2, left: -24, bottom: 0 }
+                  : { top: 8, right: 12, left: -8, bottom: 0 }
               }
             >
-              <CartesianGrid strokeDasharray="4 6" stroke={gridStroke} vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: axisColor, fontSize: narrow ? 9 : 10 }}
-                tickLine={false}
-                axisLine={{ stroke: gridStroke }}
-                interval={narrow ? "preserveStartEnd" : 0}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fill: axisColor, fontSize: narrow ? 9 : 10 }}
-                tickLine={false}
-                axisLine={false}
-                width={narrow ? 28 : 32}
-              />
+              <CartesianGrid strokeDasharray="4 5" stroke="#334155" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} />
               <Tooltip
-                cursor={{ fill: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
-                content={({ active, payload, label }) =>
-                  active && payload?.length ? (
-                    <div className={tooltipBox}>
-                      <p className={`mb-1 ${tooltipTitle}`}>{label}</p>
-                      <p className={tooltipMuted}>
-                        {payload[0]?.value} {Number(payload[0]?.value) === 1 ? "entry" : "entries"}
-                      </p>
-                    </div>
-                  ) : null
-                }
+                contentStyle={{
+                  backgroundColor: "rgba(15,23,42,.95)",
+                  border: "1px solid #334155",
+                  borderRadius: "8px",
+                  fontSize: "11px",
+                }}
               />
-              <Bar dataKey="count" name="Entries" fill={barFill} radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="profit" stackId="a" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="loss" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </ChartCard>
+      </section>
 
-      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-        <ChartCard title="Result tags" subtitle="How often each result appears (rows can have several)">
-          <div className="h-56 w-full min-w-0 sm:h-64">
-            {model.resultMix.length === 0 ? (
-              <p className="py-12 text-center text-xs text-zinc-600 dark:text-zinc-500">
-                No result tags in this range.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={model.resultMix}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={narrow ? 44 : 52}
-                    outerRadius={narrow ? 72 : 88}
-                    paddingAngle={1}
-                    label={
-                      narrow
-                        ? false
-                        : ({ name, percent }) => {
-                            const pct = Math.round((percent ?? 0) * 100);
-                            return `${name ?? ""} ${pct}%`;
-                          }
-                    }
-                    labelLine={narrow ? false : { stroke: axisColor }}
-                  >
-                    {model.resultMix.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} stroke="transparent" />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={({ active, payload }) =>
-                      active && payload?.length ? (
-                        <div className={tooltipBox}>
-                          <p className={tooltipTitle}>{String(payload[0].name)}</p>
-                          <p className={tooltipMuted}>{String(payload[0].value)} tags</p>
-                        </div>
-                      ) : null
-                    }
-                  />
-                  <Legend
-                    wrapperStyle={{ paddingTop: 8 }}
-                    formatter={(value) => (
-                      <span className="text-[10px] text-zinc-600 sm:text-xs dark:text-zinc-400">
-                        {value}
-                      </span>
-                    )}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
+      <div className="grid gap-3 md:grid-cols-3">
+        <InfoCard title="Average RR">
+          <div className="grid grid-cols-2 gap-3">
+            <TinyMetric label="Average RR" value={numberText(avgRr)} />
+            <TinyMetric label="Max RR" value={numberText(maxRr)} />
           </div>
-        </ChartCard>
-
-        <ChartCard title="Long vs short" subtitle="Rows with a position set">
-          <div className="h-56 w-full min-w-0 sm:h-64">
-            {model.positionSplit.length === 0 ? (
-              <p className="py-12 text-center text-xs text-zinc-600 dark:text-zinc-500">
-                No position tags in this range.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  layout="vertical"
-                  data={model.positionSplit}
-                  margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="4 6" stroke={gridStroke} horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tick={{ fill: axisColor, fontSize: 10 }} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={narrow ? 52 : 56}
-                    tick={{ fill: axisColor, fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) =>
-                      active && payload?.length ? (
-                        <div className={tooltipBox}>
-                          <p className={tooltipTitle}>{String(payload[0].payload.name)}</p>
-                          <p className={tooltipMuted}>{String(payload[0].value)} rows</p>
-                        </div>
-                      ) : null
-                    }
-                  />
-                  <Bar dataKey="value" fill={barFill2} radius={[0, 4, 4, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+        </InfoCard>
+        <InfoCard title="Ideal Average RR">
+          <div className="grid grid-cols-2 gap-3">
+            <TinyMetric label="Ideal Average RR" value={numberText(maxRr)} />
+            <TinyMetric label="Max Ideal RR" value={numberText(maxRr)} />
           </div>
-        </ChartCard>
+        </InfoCard>
+        <InfoCard title="Could have profit/BE">
+          <div className="grid grid-cols-2 gap-3">
+            <TinyMetric label="Could have profit/BE" value={numberText(breakEvenTrades, 0)} />
+            <TinyMetric label="Max Ideal RR" value={numberText(maxRr)} />
+          </div>
+        </InfoCard>
       </div>
 
-      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-        <ChartCard title="Sessions" subtitle="Top sessions by row count">
-          <div className="h-56 w-full min-w-0 sm:h-64">
-            {model.sessionBars.length === 0 ? (
-              <p className="py-12 text-center text-xs text-zinc-600 dark:text-zinc-500">
-                No session tags in this range.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  layout="vertical"
-                  data={model.sessionBars}
-                  margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="4 6" stroke={gridStroke} horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tick={{ fill: axisColor, fontSize: 10 }} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={narrow ? 72 : 88}
-                    tick={{ fill: axisColor, fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) =>
-                      active && payload?.length ? (
-                        <div className={tooltipBox}>
-                          <p className={`mb-0.5 max-w-[12rem] leading-snug ${tooltipTitle}`}>
-                            {String(payload[0].payload.name)}
-                          </p>
-                          <p className={tooltipMuted}>{String(payload[0].value)} rows</p>
-                        </div>
-                      ) : null
-                    }
-                  />
-                  <Bar dataKey="count" fill={barFill} radius={[0, 4, 4, 0]} maxBarSize={26} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </ChartCard>
-
-        <ChartCard title="Weekday" subtitle="Entries by weekday (UTC date on row)">
-          <div className="h-56 w-full min-w-0 sm:h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={model.weekdayBars}
-                margin={
-                  narrow
-                    ? { top: 6, right: 4, left: -18, bottom: 4 }
-                    : { top: 8, right: 8, left: -8, bottom: 4 }
-                }
-              >
-                <CartesianGrid strokeDasharray="4 6" stroke={gridStroke} vertical={false} />
-                <XAxis
-                  dataKey="short"
-                  tick={{ fill: axisColor, fontSize: narrow ? 9 : 10 }}
-                  tickLine={false}
-                  axisLine={{ stroke: gridStroke }}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fill: axisColor, fontSize: narrow ? 9 : 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={narrow ? 28 : 32}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) =>
-                    active && payload?.length ? (
-                      <div className={tooltipBox}>
-                        <p className={tooltipTitle}>
-                          {model.weekdayBars.find((w) => w.short === label)?.name ?? label}
-                        </p>
-                        <p className={tooltipMuted}>
-                          {payload[0]?.value} {Number(payload[0]?.value) === 1 ? "entry" : "entries"}
-                        </p>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Bar dataKey="count" fill="#818cf8" radius={[4, 4, 0, 0]} maxBarSize={36} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartCard>
+      <div className="inline-flex rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+        Advanced Analytics
       </div>
 
-      <ChartCard title="Trend context" subtitle="Top trend tags">
-        <div className="h-52 w-full min-w-0 sm:h-56">
-          {model.trendBars.length === 0 ? (
-            <p className="py-10 text-center text-xs text-zinc-600 dark:text-zinc-500">
-              No trend tags in this range.
-            </p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                layout="vertical"
-                data={model.trendBars}
-                margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="4 6" stroke={gridStroke} horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fill: axisColor, fontSize: 10 }} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={narrow ? 72 : 96}
-                  tick={{ fill: axisColor, fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  content={({ active, payload }) =>
-                    active && payload?.length ? (
-                      <div className={tooltipBox}>
-                        <p className={tooltipTitle}>{String(payload[0].payload.name)}</p>
-                        <p className={tooltipMuted}>{String(payload[0].value)} rows</p>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Bar dataKey="count" fill="#c084fc" radius={[0, 4, 4, 0]} maxBarSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <InfoCard title="Summary">
+          <div className="space-y-2">
+            <StatLine label="Average RR" value={numberText(avgRr)} />
+            <StatLine label="Average Duration" value={formatDuration(avgDuration)} />
+            <StatLine label="Total Trades" value={String(totalTrades)} />
+            <StatLine label="Account Age" value={formatDuration(accountAgeMinutes)} />
+          </div>
+        </InfoCard>
+        <InfoCard title="Winning Trades">
+          <div className="space-y-2">
+            <StatLine label="Total Winners" value={String(winTrades)} />
+            <StatLine label="Best Win RR" value={numberText(bestWinRr)} />
+            <StatLine label="Average Win RR" value={numberText(avgWinRr)} />
+            <StatLine label="Average Duration" value={formatDuration(avgWinDuration)} />
+          </div>
+        </InfoCard>
+        <InfoCard title="Losing Trades">
+          <div className="space-y-2">
+            <StatLine label="Total Losers" value={String(losingTrades)} />
+            <StatLine label="Worst Loss RR" value={numberText(worstLossRr)} />
+            <StatLine label="Average Loss RR" value={numberText(avgLossRr)} />
+            <StatLine label="Average Duration" value={formatDuration(avgLossDuration)} />
+          </div>
+        </InfoCard>
+      </div>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Performance per day</h4>
+        <div className="mt-3 h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={dailyPerformance}
+              layout="vertical"
+              margin={{ top: 4, right: 14, left: 8, bottom: 8 }}
+            >
+              <CartesianGrid
+                strokeDasharray="4 5"
+                stroke={isDark ? "#27272a" : "#e4e4e7"}
+                horizontal={false}
+              />
+              <XAxis
+                type="number"
+                tick={{ fill: isDark ? "#a1a1aa" : "#52525b", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="day"
+                width={76}
+                tick={{ fill: isDark ? "#a1a1aa" : "#52525b", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: isDark ? "rgba(24,24,27,.95)" : "rgba(255,255,255,.97)",
+                  border: `1px solid ${isDark ? "#3f3f46" : "#d4d4d8"}`,
+                  borderRadius: "8px",
+                  fontSize: "11px",
+                }}
+                formatter={(value, name) => {
+                  const numericValue = Number(value ?? 0);
+                  const absCents = Math.round(Math.abs(numericValue) * 100);
+                  const label = String(name).toLowerCase().includes("profit")
+                    ? "Daily Profits"
+                    : "Daily Losses";
+                  return [formatUsdFromCents(absCents), label];
+                }}
+                labelFormatter={(label) => String(label)}
+              />
+              <Bar dataKey="profit" name="Daily Profits" fill="#43bf63" stackId="day" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="loss" name="Daily Losses" fill="#c74646" stackId="day" radius={[4, 0, 0, 4]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      </ChartCard>
+      </section>
+
+      <section className="space-y-2">
+        <h4 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">Trades By Sessions</h4>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Here you can see your performance by sessions.
+        </p>
+        <div className="grid gap-3 lg:grid-cols-4">
+          {sessions.map((s) => (
+            <InfoCard key={s.session} title={s.session}>
+              <div className="space-y-2">
+                <StatLine label="Win Rate" value={`${numberText(s.winRate)}%`} />
+                <StatLine label="Total Trades" value={String(s.totalTrades)} />
+                <StatLine label="Max RR" value={numberText(s.maxRr)} />
+                <StatLine label="Profit" value={`$${numberText(s.profitUsd)}`} />
+              </div>
+            </InfoCard>
+          ))}
+        </div>
+      </section>
+
+      {filteredRows.length === 0 ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200/90">
+          No entries for the selected day filter.
+        </p>
+      ) : null}
     </section>
   );
 }
