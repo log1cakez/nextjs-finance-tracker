@@ -412,7 +412,7 @@ export function EodTrackerView({
   const [selectedMonth, setSelectedMonth] = useState(initialJournalMonth);
   const [sortRules, setSortRules] = useState<SortRule[]>([{ column: "date", dir: "desc" }]);
   const [showAllInTable, setShowAllInTable] = useState(false);
-  const [showAiReview, setShowAiReview] = useState(true);
+  const [showAiReview, setShowAiReview] = useState(false);
 
   const handleSort = useCallback((column: EodSortColumn, additive: boolean) => {
     setSortRules((prev) => {
@@ -465,6 +465,9 @@ export function EodTrackerView({
         result: r.result,
         trend: r.trend,
         position: r.position,
+        rrr: r.rrr,
+        timeRange: r.timeRange,
+        netPnlCents: r.netPnlCents,
       })),
     [monthRows],
   );
@@ -512,14 +515,22 @@ export function EodTrackerView({
         aria-label="Profit and loss calendar"
         className="scroll-mt-14 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40"
       >
-        <div>
+        <div className="flex items-center justify-between gap-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-zinc-500 dark:text-zinc-500">
             PnL calendar
           </p>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            Monthly net P&amp;L
-          </h2>
+          <a
+            href="https://www.forexfactory.com/calendar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Economic calendar
+          </a>
         </div>
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          Monthly net P&amp;L
+        </h2>
         <PnlCalendar
           rows={rows}
           tradingAccounts={tradingAccounts}
