@@ -24,15 +24,17 @@ export function DashboardOverviewSection({
           Assets and liabilities include each account’s recorded transactions and
           any starting balance you set when adding the account (same idea as the
           Accounts page), credit card balances owed for cards with a limit
-          configured, and outstanding lending. Transfers between accounts are
-          reflected in account nets (and in card utilization for credit cards
-          with limits). Not live bank balances. Projected expenses per month are
-          your average logged spending (last 6 full months) plus fixed recurring
-          amounts and installment loan payments only — not the full remaining
-          principal on lump-sum loans and not your total credit card balance
-          (that stays under liabilities). Receivable/income projections still
-          use installment pacing; lump receivables count in the yearly figure.
-          Variable recurring amounts are excluded.
+          configured, and lending outstanding balances only (remaining principal
+          after payments). Transfers between accounts are reflected in account
+          nets (and in card utilization for credit cards with limits). Not live
+          bank balances. Projected expenses per month are your average logged
+          spending (last 6 full months) plus fixed recurring amounts and
+          installment loan payments only — not the full remaining principal on
+          lump-sum loans and not your total credit card balance (that stays
+          under liabilities). Receivable repayments are not counted as projected
+          income. Variable recurring amounts are excluded. If a receivable is
+          tagged as borrowed on your credit card, its remaining balance offsets
+          liabilities (and assets by the same amount).
         </p>
       </div>
 
@@ -44,7 +46,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Positive nets + starting balances + receivables"
+            hint="Positive nets + starting balances + lending receivables outstanding (credit-linked receivables offset equally)"
             variant="income"
           />
           <StatCard
@@ -71,7 +73,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Credit owed + other nets + payables"
+            hint="Credit owed + other negative nets + lending payables outstanding (minus tagged credit-borrow receivables)"
             variant="expense"
           />
           <StatCard
@@ -141,7 +143,8 @@ export function DashboardOverviewSection({
             overview.lendingPayablesOutstandingMinor,
             preferredCurrency,
           )}{" "}
-          payable are already included in assets and liabilities above.{" "}
+          payable are included in assets/liabilities totals above as remaining
+          balances only.{" "}
           <Link
             href="/financetracker/lending"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"

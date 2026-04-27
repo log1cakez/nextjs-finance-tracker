@@ -295,7 +295,7 @@ function LendingCard({
   defaultCurrency,
 }: {
   row: LendingWithPayments;
-  accountsList: { id: string; name: string }[];
+  accountsList: { id: string; name: string; type: string; bankKind: string | null }[];
   defaultCurrency: FiatCurrency;
 }) {
   const { lending, payments, paidCents, remainingCents } = row;
@@ -493,6 +493,27 @@ function LendingCard({
                 }}
               />
             </label>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:col-span-2">
+              Linked credit-card borrowing tag (optional; receivable only)
+              <select
+                name="linkedCreditAccountId"
+                defaultValue={lending.linkedCreditAccountId ?? ""}
+                className="mt-1 min-h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 sm:min-h-9 sm:text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                <option value="">—</option>
+                {accountsList
+                  .filter((a) => a.type === "bank" && a.bankKind === "credit")
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </select>
+              <span className="mt-1 block text-[11px] font-normal text-zinc-500 dark:text-zinc-400">
+                When set, this receivable's remaining balance is excluded from total-expense
+                computation.
+              </span>
+            </label>
           </div>
 
           <button
@@ -582,6 +603,11 @@ function LendingCard({
           day: "numeric",
         })}
       </p>
+      {lending.kind === "receivable" && lending.linkedCreditAccountId ? (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          Tagged to a credit-card borrowed balance (excluded from total expenses).
+        </p>
+      ) : null}
 
       {payments.length > 0 ? (
         <ul className="mt-3 space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800/80">
@@ -613,7 +639,7 @@ export function LendingManager({
 }: {
   items: LendingWithPayments[];
   defaultCurrency: FiatCurrency;
-  accountsList: { id: string; name: string }[];
+  accountsList: { id: string; name: string; type: string; bankKind: string | null }[];
 }) {
   const [state, formAction, pending] = useActionState(
     createLending,
@@ -851,6 +877,31 @@ export function LendingManager({
               }}
             />
           </label>
+          {kind === "receivable" ? (
+            <label className="block text-sm font-medium text-zinc-700 sm:col-span-2 dark:text-zinc-300">
+              Linked credit-card borrowing tag (optional)
+              <select
+                name="linkedCreditAccountId"
+                defaultValue=""
+                className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-2 sm:min-h-9 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              >
+                <option value="">—</option>
+                {accountsList
+                  .filter((a) => a.type === "bank" && a.bankKind === "credit")
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </select>
+              <span className="mt-1 block text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                Use this when someone used your credit card; their receivable remaining balance will
+                be excluded from total-expense computation.
+              </span>
+            </label>
+          ) : (
+            <input type="hidden" name="linkedCreditAccountId" value="" />
+          )}
         </div>
 
         <button

@@ -7,6 +7,7 @@ import { getDb } from "@/db";
 import {
   categories,
   financialAccounts,
+  lendings,
   lendingPayments,
   transactions,
 } from "@/db/schema";
@@ -251,7 +252,7 @@ function emptyMonthTotals(): Record<
 
 /**
  * All recorded income/expense through `asOfEnd` (inclusive): transactions plus lending
- * payments (receivable = in, payable = out), by currency.
+ * payments (payable = out; receivable = in only when not credit-linked), by currency.
  */
 export async function computeActualTotalsByCurrencyThrough(
   userId: string,
@@ -287,7 +288,7 @@ export async function computeActualTotalsByCurrencyThrough(
     const pay = normalizeLendingPaymentRow(userId, p);
     const c = loan.currency as FiatCurrency;
     if (!SUPPORTED_CURRENCIES.includes(c)) continue;
-    if (loan.kind === "receivable") {
+    if (loan.kind === "receivable" && !loan.linkedCreditAccountId) {
       out[c].income += pay.amountCents;
     } else {
       out[c].expense += pay.amountCents;
@@ -414,6 +415,26 @@ export async function computeCurrentMonthExpensesByCurrency(
     out[c] += pay.amountCents;
   }
 
+  // Exclude receivable balances explicitly tagged as "borrowed on my credit card".
+  // This avoids counting someone else's card spending as your own total expenses.
+  const taggedRows = await db.query.lendings.findMany({
+    where: and(eq(lendings.userId, userId), eq(lendings.kind, "receivable")),
+    with: { payments: true },
+  });
+  for (const row of taggedRows) {
+    const { payments, ...raw } = row;
+    const loan = normalizeLendingRow(userId, raw);
+    if (!loan.linkedCreditAccountId) continue;
+    const c = loan.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    const paidCents = payments.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
+    const remainingCents = Math.max(0, loan.principalCents - paidCents);
+    out[c] = Math.max(0, out[c] - remainingCents);
+  }
+
   return out;
 }
 
@@ -512,7 +533,7 @@ export async function computeMonthlyCashflowTrend(
     const key = `${od.getFullYear()}-${String(od.getMonth() + 1).padStart(2, "0")}`;
     const b = buckets.get(key);
     if (!b) continue;
-    if (loan.kind === "receivable") {
+    if (loan.kind === "receivable" && !loan.linkedCreditAccountId) {
       b.incomeMinor += pay.amountCents;
     } else {
       b.expenseMinor += pay.amountCents;

@@ -7,6 +7,8 @@ export type LendingSecurePayload = {
   notes: string | null;
   /** For installment loans: total count of payments/months expected. */
   totalInstallments?: number | null;
+  /** Optional: receivable linked to a credit-card balance borrowed by someone else. */
+  linkedCreditAccountId?: string | null;
 };
 
 export type LendingPaymentSecurePayload = {
@@ -21,6 +23,7 @@ export type LendingRowNormalized = typeof lendings.$inferSelect & {
   principalCents: number;
   notes: string | null;
   totalInstallments: number | null;
+  linkedCreditAccountId: string | null;
 };
 
 export type LendingPaymentRowNormalized = typeof lendingPayments.$inferSelect & {
@@ -47,6 +50,11 @@ export function normalizeLendingRow(
         typeof d.totalInstallments === "number" && d.totalInstallments > 0
           ? Math.floor(d.totalInstallments)
           : null,
+      linkedCreditAccountId:
+        typeof d.linkedCreditAccountId === "string" &&
+        d.linkedCreditAccountId.trim().length > 0
+          ? d.linkedCreditAccountId
+          : null,
     };
   }
   return {
@@ -55,6 +63,7 @@ export function normalizeLendingRow(
     principalCents: row.principalCents ?? 0,
     notes: row.notes ?? null,
     totalInstallments: null,
+    linkedCreditAccountId: null,
   };
 }
 

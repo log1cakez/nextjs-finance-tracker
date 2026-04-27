@@ -182,7 +182,9 @@ export async function computeTransactionBuckets(
       };
       netByBucket.set(bucketKey, b);
     }
-    if (tx.kind === "income") {
+    if (tx.kind === "income" || tx.reducesCreditBalance) {
+      // reducesCreditBalance expenses are bill payments — they reduce the
+      // outstanding balance on the account, not add to spending.
       b.income += tx.amountCents;
     } else {
       b.expense += tx.amountCents;
@@ -292,6 +294,11 @@ export async function computeDashboardOverviewByCurrency(
   const byCurrency: Record<FiatCurrency, CurrencyOverview> = {
     USD: emptyOverview(),
     PHP: emptyOverview(),
+  };
+  // Receivables explicitly tagged as "borrowed on my credit card".
+  const taggedReceivableCreditBorrowMinor: Record<FiatCurrency, number> = {
+    USD: 0,
+    PHP: 0,
   };
 
   const avgExpenseTxByCurrency =
@@ -420,9 +427,9 @@ export async function computeDashboardOverviewByCurrency(
       );
     if (L.kind === "receivable") {
       byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
-      // Also treat outstanding receivables as projected inflow.
-      byCurrency[c].projectedIncomeMinor += lendMo;
-      byCurrency[c].projectedIncomeYearlyMinor += lendYr;
+      if (L.linkedCreditAccountId) {
+        taggedReceivableCreditBorrowMinor[c] += remainingCents;
+      }
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;
       byCurrency[c].projectedExpenseScheduledMinor += lendMo;
@@ -431,10 +438,23 @@ export async function computeDashboardOverviewByCurrency(
   }
 
   for (const c of SUPPORTED_CURRENCIES) {
+    // Include lending in totals using outstanding balance only (principal minus payments).
     byCurrency[c].assetsFromActivityMinor +=
       byCurrency[c].lendingReceivablesOutstandingMinor;
     byCurrency[c].liabilitiesFromActivityMinor +=
       byCurrency[c].lendingPayablesOutstandingMinor;
+    // If a receivable is tagged as someone else's credit-card borrowing, offset it
+    // from liabilities and assets equally so balance-sheet net position is unchanged
+    // while personal owed liabilities are reduced.
+    const tagged = taggedReceivableCreditBorrowMinor[c];
+    if (tagged > 0) {
+      const offset = Math.min(tagged, byCurrency[c].liabilitiesFromActivityMinor);
+      byCurrency[c].liabilitiesFromActivityMinor -= offset;
+      byCurrency[c].assetsFromActivityMinor = Math.max(
+        0,
+        byCurrency[c].assetsFromActivityMinor - offset,
+      );
+    }
     const txMo = byCurrency[c].projectedExpenseFromTransactionsMinor;
     byCurrency[c].projectedExpenseMinor =
       txMo + byCurrency[c].projectedExpenseScheduledMinor;
@@ -446,12 +466,16 @@ export async function computeDashboardOverviewByCurrency(
 
 /**
  * Assets / liabilities = cash-like nets (transactions + starting balances), **plus
- * credit card balances owed** for cards with a limit (`computeCreditUsedCents`), then
- * lending. Transfers are included in bucket nets for non-credit-limit accounts.
+ * credit card balances owed** for cards with a limit (`computeCreditUsedCents`), plus
+ * lending outstanding balances (remaining principal only).
+ * Receivables tagged as "borrowed on my credit card" offset liabilities
+ * (and assets by the same offset) so personal owed card balances are reduced
+ * without changing net position.
+ * Transfers are included in bucket nets for non-credit-limit accounts.
  * Credit-with-limit accounts are skipped in the bucket loop so utilization
  * (which already includes transfers) is not double counted.
  * `creditCardOutstandingMinor` is part of liabilities.
- * `lending*` fields are the lending-only portions.
+ * `lending*` fields are lending-only totals.
  * Monthly projected expense burn = avg expense transactions (6 mo) + recurring + installment loan payments;
  * credit card balance is liabilities only, not added to projected expense totals.
  */
