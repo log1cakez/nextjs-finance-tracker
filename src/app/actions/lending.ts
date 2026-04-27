@@ -81,6 +81,7 @@ const createLendingSchema = z.object({
   alreadyPaidAt: z.string().optional(),
   alreadyPaidInstallments: z.string().optional(),
   alreadyPaidAccountId: z.string().uuid().optional(),
+  linkedCreditAccountId: z.string().uuid().optional(),
 });
 
 export async function createLending(
@@ -113,6 +114,10 @@ export async function createLending(
     alreadyPaidInstallments: formString(formData, "alreadyPaidInstallments"),
     alreadyPaidAccountId: (() => {
       const v = formString(formData, "alreadyPaidAccountId")?.trim() ?? "";
+      return v.length > 0 ? v : undefined;
+    })(),
+    linkedCreditAccountId: (() => {
+      const v = formString(formData, "linkedCreditAccountId")?.trim() ?? "";
       return v.length > 0 ? v : undefined;
     })(),
   });
@@ -187,6 +192,19 @@ export async function createLending(
   const notesFormatted = parsed.data.notes?.trim()
     ? formatTypedBlock(parsed.data.notes.trim())
     : null;
+  let linkedCreditAccountId: string | null = null;
+  if (parsed.data.kind === "receivable" && parsed.data.linkedCreditAccountId) {
+    const acc = await getDb().query.financialAccounts.findFirst({
+      where: and(
+        eq(financialAccounts.id, parsed.data.linkedCreditAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    });
+    if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
+      return { error: "Pick a valid credit-card account to tag this receivable." };
+    }
+    linkedCreditAccountId = acc.id;
+  }
 
   let financePayload: string;
   try {
@@ -195,6 +213,7 @@ export async function createLending(
       principalCents: minor,
       notes: notesFormatted,
       totalInstallments,
+      linkedCreditAccountId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -292,6 +311,7 @@ const updateLendingSchema = z.object({
   totalInstallments: z.string().optional(),
   startedAt: z.string().min(1, "Date is required"),
   notes: z.string().max(2000).optional(),
+  linkedCreditAccountId: z.string().uuid().optional(),
 });
 
 export async function updateLending(
@@ -318,6 +338,10 @@ export async function updateLending(
     totalInstallments: formString(formData, "totalInstallments"),
     startedAt: formString(formData, "startedAt"),
     notes: formString(formData, "notes"),
+    linkedCreditAccountId: (() => {
+      const v = formString(formData, "linkedCreditAccountId")?.trim() ?? "";
+      return v.length > 0 ? v : undefined;
+    })(),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -334,6 +358,19 @@ export async function updateLending(
   const notesFormatted = parsed.data.notes?.trim()
     ? formatTypedBlock(parsed.data.notes.trim())
     : null;
+  let linkedCreditAccountId: string | null = null;
+  if (parsed.data.kind === "receivable" && parsed.data.linkedCreditAccountId) {
+    const acc = await getDb().query.financialAccounts.findFirst({
+      where: and(
+        eq(financialAccounts.id, parsed.data.linkedCreditAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    });
+    if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
+      return { error: "Pick a valid credit-card account to tag this receivable." };
+    }
+    linkedCreditAccountId = acc.id;
+  }
 
   const db = getDb();
   const row = await db.query.lendings.findFirst({
@@ -380,6 +417,7 @@ export async function updateLending(
       principalCents: principalMinor,
       notes: notesFormatted,
       totalInstallments,
+      linkedCreditAccountId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
