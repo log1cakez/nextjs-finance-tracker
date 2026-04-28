@@ -85,6 +85,24 @@ function normalizeKey(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function importDuplicateKey(parts: {
+  date: string;
+  amountCents: number;
+  currency: FiatCurrency;
+  kind: "income" | "expense";
+  description: string;
+  accountId: string | null;
+}): string {
+  return [
+    parts.date,
+    parts.amountCents,
+    parts.currency,
+    parts.kind,
+    normalizeKey(parts.description),
+    parts.accountId ?? "",
+  ].join("|");
+}
+
 function cellToIsoDate(value: unknown): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return isoDate(value);
@@ -643,15 +661,14 @@ export async function importDailyExpenseTrackerXlsx(
   const existingSignatures = new Set(
     existingRows.map((row) => {
       const tx = toDecryptedTransaction(userId, row);
-      return [
-        isoDate(new Date(tx.occurredAt)),
-        tx.amountCents,
-        tx.currency,
-        tx.kind,
-        normalizeKey(tx.description),
-        row.categoryId ?? "",
-        row.financialAccountId ?? "",
-      ].join("|");
+      return importDuplicateKey({
+        date: isoDate(new Date(tx.occurredAt)),
+        amountCents: tx.amountCents,
+        currency: tx.currency,
+        kind: tx.kind,
+        description: tx.description,
+        accountId: row.financialAccountId,
+      });
     }),
   );
 
@@ -659,15 +676,14 @@ export async function importDailyExpenseTrackerXlsx(
   let skipped = 0;
   const seenInWorkbook = new Set<string>();
   for (const row of parsedRows) {
-    const signature = [
-      row.date,
-      row.amountCents,
-      row.currency,
-      row.kind,
-      normalizeKey(row.description),
-      row.categoryId ?? "",
-      row.accountId,
-    ].join("|");
+    const signature = importDuplicateKey({
+      date: row.date,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      kind: row.kind,
+      description: row.description,
+      accountId: row.accountId,
+    });
     if (existingSignatures.has(signature) || seenInWorkbook.has(signature)) {
       skipped += 1;
       continue;
