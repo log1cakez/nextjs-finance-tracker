@@ -102,7 +102,7 @@ export type CurrencyOverview = {
   liabilitiesFromActivityMinor: number;
   /** Credit card balances owed (limit-currency utilization), included in liabilities. */
   creditCardOutstandingMinor: number;
-  /** Outstanding principal still owed to you (receivables), after recorded payments. */
+  /** Outstanding principal still owed to you, excluding credit-card-tagged receivables. */
   lendingReceivablesOutstandingMinor: number;
   /** Outstanding principal you still owe (payables), after recorded payments. */
   lendingPayablesOutstandingMinor: number;
@@ -295,11 +295,6 @@ export async function computeDashboardOverviewByCurrency(
     USD: emptyOverview(),
     PHP: emptyOverview(),
   };
-  // Receivables explicitly tagged as "borrowed on my credit card".
-  const taggedReceivableCreditBorrowMinor: Record<FiatCurrency, number> = {
-    USD: 0,
-    PHP: 0,
-  };
 
   const avgExpenseTxByCurrency =
     await computeAverageMonthlyExpenseTransactionsMinor(userId);
@@ -424,14 +419,14 @@ export async function computeDashboardOverviewByCurrency(
         L.totalInstallments,
         remainingCents,
         installmentsPaid,
-      );
+    );
     if (L.kind === "receivable") {
-      byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
       if (L.linkedCreditAccountId) {
-        taggedReceivableCreditBorrowMinor[c] += remainingCents;
-        // Only account-linked/credit-tagged receivables are treated as projected inflow.
-        byCurrency[c].projectedIncomeMinor += lendMo;
-        byCurrency[c].projectedIncomeYearlyMinor += lendYr;
+        // Tagged receivables represent someone else's credit-card balance. They
+        // are excluded from personal assets, projected income, and handled in
+        // credit utilization.
+      } else {
+        byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
       }
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;
@@ -446,18 +441,6 @@ export async function computeDashboardOverviewByCurrency(
       byCurrency[c].lendingReceivablesOutstandingMinor;
     byCurrency[c].liabilitiesFromActivityMinor +=
       byCurrency[c].lendingPayablesOutstandingMinor;
-    // If a receivable is tagged as someone else's credit-card borrowing, offset it
-    // from liabilities and assets equally so balance-sheet net position is unchanged
-    // while personal owed liabilities are reduced.
-    const tagged = taggedReceivableCreditBorrowMinor[c];
-    if (tagged > 0) {
-      const offset = Math.min(tagged, byCurrency[c].liabilitiesFromActivityMinor);
-      byCurrency[c].liabilitiesFromActivityMinor -= offset;
-      byCurrency[c].assetsFromActivityMinor = Math.max(
-        0,
-        byCurrency[c].assetsFromActivityMinor - offset,
-      );
-    }
     const txMo = byCurrency[c].projectedExpenseFromTransactionsMinor;
     byCurrency[c].projectedExpenseMinor =
       txMo + byCurrency[c].projectedExpenseScheduledMinor;
@@ -469,11 +452,10 @@ export async function computeDashboardOverviewByCurrency(
 
 /**
  * Assets / liabilities = cash-like nets (transactions + starting balances), **plus
- * credit card balances owed** for cards with a limit (`computeCreditUsedCents`), plus
- * lending outstanding balances (remaining principal only).
- * Receivables tagged as "borrowed on my credit card" offset liabilities
- * (and assets by the same offset) so personal owed card balances are reduced
- * without changing net position.
+ * personal credit card balances owed for cards with a limit (`computeCreditUsedCents`),
+ * plus lending outstanding balances (remaining principal only).
+ * Receivables tagged as "borrowed on my credit card" are excluded from personal
+ * receivable assets and from personal card utilization.
  * Transfers are included in bucket nets for non-credit-limit accounts.
  * Credit-with-limit accounts are skipped in the bucket loop so utilization
  * (which already includes transfers) is not double counted.

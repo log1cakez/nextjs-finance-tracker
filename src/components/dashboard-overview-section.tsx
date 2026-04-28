@@ -31,11 +31,10 @@ export function DashboardOverviewSection({
           spending (last 6 full months) plus fixed recurring amounts and
           installment loan payments only — not the full remaining principal on
           lump-sum loans and not your total credit card balance (that stays
-          under liabilities). Receivable projections are only counted as income
-          when they are account-linked (credit-card borrowed tag). Variable
-          recurring amounts are excluded. If a receivable is tagged as
-          borrowed on your credit card, its remaining balance offsets
-          liabilities (and assets by the same amount).
+          under liabilities). Variable recurring amounts are excluded. If a
+          receivable is tagged as borrowed on your credit card, its remaining
+          balance is excluded from personal assets, projected income, and the
+          card balance shown as your liability.
         </p>
       </div>
 
@@ -47,7 +46,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Positive nets + starting balances + lending receivables outstanding (credit-linked receivables offset equally)"
+            hint="Positive nets + starting balances + untagged lending receivables outstanding"
             variant="income"
           />
           <StatCard
@@ -74,7 +73,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Credit owed + other negative nets + lending payables outstanding (minus tagged credit-borrow receivables)"
+            hint="Personal credit owed + other negative nets + lending payables outstanding"
             variant="expense"
           />
           <StatCard
@@ -117,8 +116,9 @@ export function DashboardOverviewSection({
             overview.creditCardOutstandingMinor,
             preferredCurrency,
           )}{" "}
-          owed on cards with a credit limit set (same utilization as the Accounts
-          page) is included in liabilities above.{" "}
+          owed on cards with a credit limit set (same personal utilization as
+          the Accounts page, excluding tagged receivables) is included in
+          liabilities above.{" "}
           <Link
             href="/financetracker/accounts"
             className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"

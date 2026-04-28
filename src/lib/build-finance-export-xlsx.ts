@@ -155,7 +155,8 @@ export async function buildFinanceExportXlsxBuffer(
       Metric: "Assets (from activity)",
       USD: minorToMajor(usd.assetsFromActivityMinor),
       PHP: minorToMajor(php.assetsFromActivityMinor),
-      Notes: "Per-account transaction nets + starting balances + lending receivables",
+      Notes:
+        "Per-account transaction nets + starting balances + untagged lending receivables",
     },
     {
       Metric: "Liabilities (from activity)",
@@ -198,7 +199,7 @@ export async function buildFinanceExportXlsxBuffer(
       Metric: "Lending receivables (in assets total)",
       USD: minorToMajor(usd.lendingReceivablesOutstandingMinor),
       PHP: minorToMajor(php.lendingReceivablesOutstandingMinor),
-      Notes: "Included in Assets",
+      Notes: "Included in Assets; excludes credit-card-tagged receivables",
     },
     {
       Metric: "Lending payables (in liabilities total)",
