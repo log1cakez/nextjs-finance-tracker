@@ -15,13 +15,13 @@ import { encryptTransactionPayload } from "@/lib/transaction-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
 
 const WEEKDAYS = [
+  "Sunday",
   "Monday",
   "Tuesday",
   "Wednesday",
   "Thursday",
   "Friday",
   "Saturday",
-  "Sunday",
 ] as const;
 
 const FLAT_ENTRY_HEADERS = [
@@ -67,11 +67,10 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function mondayOfWeek(d = new Date()): Date {
+function sundayOfWeek(d = new Date()): Date {
   const out = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
   const day = out.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  out.setDate(out.getDate() + diff);
+  out.setDate(out.getDate() - day);
   return out;
 }
 
@@ -203,7 +202,7 @@ async function addDropdownsToWorkbook(
   ].join("");
   const validationBlock = `<dataValidations count="2">${validations}</dataValidations>`;
 
-  // Sheet order: Weekly Summary = 1, Monday-Sunday = 2-8.
+  // Sheet order: Weekly Summary = 1, Sunday-Saturday = 2-8.
   for (let sheetNumber = 2; sheetNumber <= 8; sheetNumber++) {
     const path = `xl/worksheets/sheet${sheetNumber}.xml`;
     const file = zip.file(path);
@@ -462,7 +461,7 @@ export async function buildDailyExpenseTrackerXlsxBuffer(
 ): Promise<Buffer> {
   const { categoriesList, accounts } =
     await getExpenseCategoriesAndAccounts(userId);
-  const weekStart = mondayOfWeek(options.weekStart);
+  const weekStart = sundayOfWeek(options.weekStart);
   const wb = XLSX.utils.book_new();
 
   const summaryRows: SheetValue[][] = [
