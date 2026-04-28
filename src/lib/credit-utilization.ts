@@ -1,6 +1,6 @@
 import { and, eq, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accountTransfers, lendingPayments, transactions } from "@/db/schema";
+import { accountTransfers, lendings, lendingPayments, transactions } from "@/db/schema";
 import type { FiatCurrency } from "@/lib/money";
 import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
@@ -71,6 +71,25 @@ export async function computeCreditUsedCents(
     const pay = normalizeLendingPaymentRow(userId, p);
     if (loan.kind === "receivable") used -= pay.amountCents;
     else used += pay.amountCents;
+  }
+
+  // Subtract the still-unpaid portion of receivables tagged to this card.
+  // Those charges belong to the counterparty — the user fronted them via the card
+  // but they are not a personal liability.
+  const taggedReceivables = await db.query.lendings.findMany({
+    where: and(eq(lendings.userId, userId), eq(lendings.kind, "receivable")),
+    with: { payments: true },
+  });
+  for (const row of taggedReceivables) {
+    const { payments: lPays, ...lRaw } = row;
+    const loan = normalizeLendingRow(userId, lRaw);
+    if (loan.linkedCreditAccountId !== financialAccountId) continue;
+    if (loan.currency !== limitCurrency) continue;
+    const totalPaid = lPays.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
+    used -= Math.max(0, loan.principalCents - totalPaid);
   }
 
   return used;
