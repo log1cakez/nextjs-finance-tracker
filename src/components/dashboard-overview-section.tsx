@@ -31,10 +31,11 @@ export function DashboardOverviewSection({
           spending (last 6 full months) plus fixed recurring amounts and
           installment loan payments only — not the full remaining principal on
           lump-sum loans and not your total credit card balance (that stays
-          under liabilities). Receivable repayments are not counted as projected
-          income. Variable recurring amounts are excluded. If a receivable is
-          tagged as borrowed on your credit card, its unpaid balance is excluded
-          from both the credit card outstanding total and your assets.
+          under liabilities). Receivable projections are only counted as income
+          when they are account-linked (credit-card borrowed tag). Variable
+          recurring amounts are excluded. If a receivable is tagged as
+          borrowed on your credit card, its remaining balance offsets
+          liabilities (and assets by the same amount).
         </p>
       </div>
 
@@ -46,7 +47,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Positive nets + starting balances + lending receivables outstanding (credit-tagged receivables excluded)"
+            hint="Positive nets + starting balances + lending receivables outstanding (credit-linked receivables offset equally)"
             variant="income"
           />
           <StatCard
@@ -73,7 +74,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Credit owed (excl. tagged receivables) + other negative nets + lending payables outstanding"
+            hint="Credit owed + other negative nets + lending payables outstanding (minus tagged credit-borrow receivables)"
             variant="expense"
           />
           <StatCard

@@ -12,6 +12,7 @@ import { DashboardCashflowChart } from "@/components/dashboard-cashflow-chart";
 import { DashboardDueDatesSection } from "@/components/dashboard-due-dates-section";
 import { DashboardOverviewSection } from "@/components/dashboard-overview-section";
 import { DashboardRecentActivityList } from "@/components/dashboard-recent-activity-list";
+import { DailyExpenseTrackerImportExport } from "@/components/daily-expense-tracker-import-export";
 import { ExpenseMoodGif } from "@/components/expense-mood-gif";
 import { StatCard } from "@/components/stat-card";
 import { getExpenseMoodTier } from "@/lib/expense-mood";
@@ -122,6 +123,8 @@ export default async function FinanceTrackerDashboardPage() {
       </div>
 
       <DashboardCashflowChart data={cashflowTrend} currency={preferredCurrency} />
+
+      <DailyExpenseTrackerImportExport />
 
       <DashboardOverviewSection
         preferredCurrency={preferredCurrency}
