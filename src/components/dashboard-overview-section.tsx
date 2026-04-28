@@ -33,8 +33,8 @@ export function DashboardOverviewSection({
           lump-sum loans and not your total credit card balance (that stays
           under liabilities). Receivable repayments are not counted as projected
           income. Variable recurring amounts are excluded. If a receivable is
-          tagged as borrowed on your credit card, its remaining balance offsets
-          liabilities (and assets by the same amount).
+          tagged as borrowed on your credit card, its unpaid balance is excluded
+          from both the credit card outstanding total and your assets.
         </p>
       </div>
 
@@ -46,7 +46,7 @@ export function DashboardOverviewSection({
               overview.assetsFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Positive nets + starting balances + lending receivables outstanding (credit-linked receivables offset equally)"
+            hint="Positive nets + starting balances + lending receivables outstanding (credit-tagged receivables excluded)"
             variant="income"
           />
           <StatCard
@@ -73,7 +73,7 @@ export function DashboardOverviewSection({
               overview.liabilitiesFromActivityMinor,
               preferredCurrency,
             )}
-            hint="Credit owed + other negative nets + lending payables outstanding (minus tagged credit-borrow receivables)"
+            hint="Credit owed (excl. tagged receivables) + other negative nets + lending payables outstanding"
             variant="expense"
           />
           <StatCard

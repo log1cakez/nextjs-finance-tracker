@@ -102,7 +102,7 @@ export type CurrencyOverview = {
   liabilitiesFromActivityMinor: number;
   /** Credit card balances owed (limit-currency utilization), included in liabilities. */
   creditCardOutstandingMinor: number;
-  /** Outstanding principal still owed to you (receivables), after recorded payments. */
+  /** Outstanding principal still owed to you (non-credit-tagged receivables only), after recorded payments. */
   lendingReceivablesOutstandingMinor: number;
   /** Outstanding principal you still owe (payables), after recorded payments. */
   lendingPayablesOutstandingMinor: number;
@@ -295,12 +295,6 @@ export async function computeDashboardOverviewByCurrency(
     USD: emptyOverview(),
     PHP: emptyOverview(),
   };
-  // Receivables explicitly tagged as "borrowed on my credit card".
-  const taggedReceivableCreditBorrowMinor: Record<FiatCurrency, number> = {
-    USD: 0,
-    PHP: 0,
-  };
-
   const avgExpenseTxByCurrency =
     await computeAverageMonthlyExpenseTransactionsMinor(userId);
   for (const c of SUPPORTED_CURRENCIES) {
@@ -426,9 +420,8 @@ export async function computeDashboardOverviewByCurrency(
         installmentsPaid,
       );
     if (L.kind === "receivable") {
-      byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
-      if (L.linkedCreditAccountId) {
-        taggedReceivableCreditBorrowMinor[c] += remainingCents;
+      if (!L.linkedCreditAccountId) {
+        byCurrency[c].lendingReceivablesOutstandingMinor += remainingCents;
       }
     } else {
       byCurrency[c].lendingPayablesOutstandingMinor += remainingCents;
@@ -443,18 +436,6 @@ export async function computeDashboardOverviewByCurrency(
       byCurrency[c].lendingReceivablesOutstandingMinor;
     byCurrency[c].liabilitiesFromActivityMinor +=
       byCurrency[c].lendingPayablesOutstandingMinor;
-    // If a receivable is tagged as someone else's credit-card borrowing, offset it
-    // from liabilities and assets equally so balance-sheet net position is unchanged
-    // while personal owed liabilities are reduced.
-    const tagged = taggedReceivableCreditBorrowMinor[c];
-    if (tagged > 0) {
-      const offset = Math.min(tagged, byCurrency[c].liabilitiesFromActivityMinor);
-      byCurrency[c].liabilitiesFromActivityMinor -= offset;
-      byCurrency[c].assetsFromActivityMinor = Math.max(
-        0,
-        byCurrency[c].assetsFromActivityMinor - offset,
-      );
-    }
     const txMo = byCurrency[c].projectedExpenseFromTransactionsMinor;
     byCurrency[c].projectedExpenseMinor =
       txMo + byCurrency[c].projectedExpenseScheduledMinor;
