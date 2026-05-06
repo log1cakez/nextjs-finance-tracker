@@ -66,5 +66,21 @@ export async function computeAccountNetActivityCents(
     else net -= pay.amountCents;
   }
 
+  // Receivables funded from this account: the principal cash left this account
+  // when lent. Any payments received back into this account are already captured
+  // above, so we subtract the full principal here and let those payments cancel
+  // it out as they come in. Skip credit-card-sourced receivables (handled via
+  // utilization, not cashflow).
+  const sourcedLoans = await db.query.lendings.findMany({
+    where: and(eq(lendings.userId, userId), eq(lendings.kind, "receivable")),
+  });
+  for (const row of sourcedLoans) {
+    const loan = normalizeLendingRow(userId, row);
+    if (loan.sourceAccountId !== financialAccountId) continue;
+    if (loan.linkedCreditAccountId) continue;
+    if (loan.currency !== currency) continue;
+    net -= loan.principalCents;
+  }
+
   return net;
 }

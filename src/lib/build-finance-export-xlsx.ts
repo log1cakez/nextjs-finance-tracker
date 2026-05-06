@@ -340,7 +340,7 @@ export async function buildFinanceExportXlsxBuffer(
   }
   appendSheet(wb, "Cashflow trend", cashflowRows);
 
-  const transactionExport = txRows.map((row) => {
+  const txExportRows = txRows.map((row) => {
     const { category, financialAccount, ...raw } = row;
     const tx = toDecryptedTransaction(userId, raw);
     return {
@@ -354,9 +354,40 @@ export async function buildFinanceExportXlsxBuffer(
       Account: financialAccount
         ? decryptFinancePlaintext(userId, financialAccount.name)
         : "",
+      "Transfer from": "",
+      "Transfer to": "",
     };
   });
-  appendSheet(wb, "Transactions", transactionExport);
+
+  const transferExportRows = transferRows
+    .map((row) => {
+      const { fromAccount, toAccount, payload, ...rest } = row;
+      if (!fromAccount || !toAccount) return null;
+      let description = "";
+      try {
+        description = decryptTransactionPayload(userId, payload).description;
+      } catch { /* ignore */ }
+      const fromName = decryptFinancePlaintext(userId, fromAccount.name);
+      const toName = decryptFinancePlaintext(userId, toAccount.name);
+      return {
+        Date: isoDate(new Date(rest.occurredAt)),
+        Description: description || `Transfer: ${fromName} → ${toName}`,
+        Kind: "transfer",
+        Amount: transferAmountCentsFromRow(userId, { amountCents: rest.amountCents, payload }) / 100,
+        Currency: rest.currency,
+        "Card bill payment": "",
+        Category: "",
+        Account: "",
+        "Transfer from": fromName,
+        "Transfer to": toName,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+
+  const allActivityRows = [...txExportRows, ...transferExportRows].sort(
+    (a, b) => a.Date.localeCompare(b.Date),
+  );
+  appendSheet(wb, "Transactions", allActivityRows);
 
   appendSheet(
     wb,
@@ -428,6 +459,9 @@ export async function buildFinanceExportXlsxBuffer(
     })),
   );
 
+  const acctNameById = new Map(
+    acctRows.map((a) => [a.id, decryptFinancePlaintext(userId, a.name)]),
+  );
   const lendingSummary = lendingRows.map((raw) => {
     const { payments, ...lr } = raw;
     const L = normalizeLendingRow(userId, lr);
@@ -445,6 +479,7 @@ export async function buildFinanceExportXlsxBuffer(
       Currency: L.currency,
       Started: isoDate(new Date(L.startedAt)),
       "Repayment style": L.repaymentStyle,
+      "Source account": L.sourceAccountId ? (acctNameById.get(L.sourceAccountId) ?? "") : "",
       Notes: L.notes ?? "",
     };
   });

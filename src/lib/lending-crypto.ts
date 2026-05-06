@@ -9,6 +9,8 @@ export type LendingSecurePayload = {
   totalInstallments?: number | null;
   /** Optional: receivable linked to a credit-card balance borrowed by someone else. */
   linkedCreditAccountId?: string | null;
+  /** Optional: the account the funds came from when this receivable was lent out. */
+  sourceAccountId?: string | null;
 };
 
 export type LendingPaymentSecurePayload = {
@@ -24,6 +26,7 @@ export type LendingRowNormalized = typeof lendings.$inferSelect & {
   notes: string | null;
   totalInstallments: number | null;
   linkedCreditAccountId: string | null;
+  sourceAccountId: string | null;
 };
 
 export type LendingPaymentRowNormalized = typeof lendingPayments.$inferSelect & {
@@ -55,6 +58,11 @@ export function normalizeLendingRow(
         d.linkedCreditAccountId.trim().length > 0
           ? d.linkedCreditAccountId
           : null,
+      sourceAccountId:
+        typeof d.sourceAccountId === "string" &&
+        d.sourceAccountId.trim().length > 0
+          ? d.sourceAccountId
+          : null,
     };
   }
   return {
@@ -64,6 +72,7 @@ export function normalizeLendingRow(
     notes: row.notes ?? null,
     totalInstallments: null,
     linkedCreditAccountId: null,
+    sourceAccountId: null,
   };
 }
 

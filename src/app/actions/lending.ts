@@ -81,7 +81,7 @@ const createLendingSchema = z.object({
   alreadyPaidAt: z.string().optional(),
   alreadyPaidInstallments: z.string().optional(),
   alreadyPaidAccountId: z.string().uuid().optional(),
-  linkedCreditAccountId: z.string().uuid().optional(),
+  sourceAccountId: z.string().uuid().optional(),
 });
 
 export async function createLending(
@@ -116,8 +116,8 @@ export async function createLending(
       const v = formString(formData, "alreadyPaidAccountId")?.trim() ?? "";
       return v.length > 0 ? v : undefined;
     })(),
-    linkedCreditAccountId: (() => {
-      const v = formString(formData, "linkedCreditAccountId")?.trim() ?? "";
+    sourceAccountId: (() => {
+      const v = formString(formData, "sourceAccountId")?.trim() ?? "";
       return v.length > 0 ? v : undefined;
     })(),
   });
@@ -193,17 +193,21 @@ export async function createLending(
     ? formatTypedBlock(parsed.data.notes.trim())
     : null;
   let linkedCreditAccountId: string | null = null;
-  if (parsed.data.kind === "receivable" && parsed.data.linkedCreditAccountId) {
+  let sourceAccountId: string | null = null;
+  if (parsed.data.kind === "receivable" && parsed.data.sourceAccountId) {
     const acc = await getDb().query.financialAccounts.findFirst({
       where: and(
-        eq(financialAccounts.id, parsed.data.linkedCreditAccountId),
+        eq(financialAccounts.id, parsed.data.sourceAccountId),
         eq(financialAccounts.userId, userId),
       ),
     });
-    if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
-      return { error: "Pick a valid credit-card account to tag this receivable." };
+    if (!acc) {
+      return { error: "Pick a valid account for the source of funds." };
     }
-    linkedCreditAccountId = acc.id;
+    sourceAccountId = acc.id;
+    if (acc.type === "bank" && acc.bankKind === "credit") {
+      linkedCreditAccountId = acc.id;
+    }
   }
 
   let financePayload: string;
@@ -214,6 +218,7 @@ export async function createLending(
       notes: notesFormatted,
       totalInstallments,
       linkedCreditAccountId,
+      sourceAccountId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -311,7 +316,7 @@ const updateLendingSchema = z.object({
   totalInstallments: z.string().optional(),
   startedAt: z.string().min(1, "Date is required"),
   notes: z.string().max(2000).optional(),
-  linkedCreditAccountId: z.string().uuid().optional(),
+  sourceAccountId: z.string().uuid().optional(),
 });
 
 export async function updateLending(
@@ -338,8 +343,8 @@ export async function updateLending(
     totalInstallments: formString(formData, "totalInstallments"),
     startedAt: formString(formData, "startedAt"),
     notes: formString(formData, "notes"),
-    linkedCreditAccountId: (() => {
-      const v = formString(formData, "linkedCreditAccountId")?.trim() ?? "";
+    sourceAccountId: (() => {
+      const v = formString(formData, "sourceAccountId")?.trim() ?? "";
       return v.length > 0 ? v : undefined;
     })(),
   });
@@ -359,17 +364,21 @@ export async function updateLending(
     ? formatTypedBlock(parsed.data.notes.trim())
     : null;
   let linkedCreditAccountId: string | null = null;
-  if (parsed.data.kind === "receivable" && parsed.data.linkedCreditAccountId) {
+  let sourceAccountId: string | null = null;
+  if (parsed.data.kind === "receivable" && parsed.data.sourceAccountId) {
     const acc = await getDb().query.financialAccounts.findFirst({
       where: and(
-        eq(financialAccounts.id, parsed.data.linkedCreditAccountId),
+        eq(financialAccounts.id, parsed.data.sourceAccountId),
         eq(financialAccounts.userId, userId),
       ),
     });
-    if (!acc || acc.type !== "bank" || acc.bankKind !== "credit") {
-      return { error: "Pick a valid credit-card account to tag this receivable." };
+    if (!acc) {
+      return { error: "Pick a valid account for the source of funds." };
     }
-    linkedCreditAccountId = acc.id;
+    sourceAccountId = acc.id;
+    if (acc.type === "bank" && acc.bankKind === "credit") {
+      linkedCreditAccountId = acc.id;
+    }
   }
 
   const db = getDb();
@@ -418,6 +427,7 @@ export async function updateLending(
       notes: notesFormatted,
       totalInstallments,
       linkedCreditAccountId,
+      sourceAccountId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

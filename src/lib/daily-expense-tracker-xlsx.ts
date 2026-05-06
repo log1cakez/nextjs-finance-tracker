@@ -1,8 +1,8 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { getDb } from "@/db";
-import { categories, financialAccounts, transactions } from "@/db/schema";
+import { accountTransfers, categories, financialAccounts, transactions } from "@/db/schema";
 import { decryptFinancePlaintext } from "@/lib/finance-field-crypto";
 import { normalizeFinancialAccountRow } from "@/lib/financial-account-crypto";
 import {
@@ -11,8 +11,9 @@ import {
   type FiatCurrency,
 } from "@/lib/money";
 import { formatTypedLabel } from "@/lib/typed-label-format";
-import { encryptTransactionPayload } from "@/lib/transaction-crypto";
+import { decryptTransactionPayload, encryptTransactionPayload } from "@/lib/transaction-crypto";
 import { toDecryptedTransaction } from "@/lib/transaction-decrypt";
+import { transferAmountCentsFromRow } from "@/lib/transfer-amount";
 
 const WEEKDAYS = [
   "Sunday",
@@ -217,6 +218,7 @@ async function addDropdownsToWorkbook(
   await styleSheetXml(zip, "xl/worksheets/sheet1.xml", styleSummarySheetXml);
   await styleSheetXml(zip, "xl/worksheets/sheet9.xml", styleEntriesSheetXml);
   await styleSheetXml(zip, "xl/worksheets/sheet10.xml", styleListsSheetXml);
+  await styleSheetXml(zip, "xl/worksheets/sheet11.xml", styleTransfersSheetXml);
 
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -347,6 +349,13 @@ function styleListsSheetXml(xml: string): string {
   return addRowHeights(out, { 1: 23 });
 }
 
+function styleTransfersSheetXml(xml: string): string {
+  let out = xml;
+  out = setRangeStyle(out, ["A", "B", "C", "D", "E", "F"], 1, 1, 2);
+  out = setRangeStyle(out, ["A", "B", "C", "D", "E", "F"], 2, 500, 7);
+  return addRowHeights(out, { 1: 23 });
+}
+
 function parseRowsFromSheet(
   sheetName: string,
   rows: Record<string, unknown>[],
@@ -415,6 +424,15 @@ function parseRowsFromSheet(
   return { parsedRows, errors };
 }
 
+async function dbQueryAllTransfers(userId: string) {
+  const db = getDb();
+  return db.query.accountTransfers.findMany({
+    where: eq(accountTransfers.userId, userId),
+    orderBy: [asc(accountTransfers.occurredAt)],
+    with: { fromAccount: true, toAccount: true },
+  });
+}
+
 async function getExpenseCategoriesAndAccounts(userId: string): Promise<{
   categoriesList: ListItem[];
   accounts: ListItem[];
@@ -459,8 +477,10 @@ export async function buildDailyExpenseTrackerXlsxBuffer(
   userId: string,
   options: { preferredCurrency: FiatCurrency; weekStart?: Date },
 ): Promise<Buffer> {
-  const { categoriesList, accounts } =
-    await getExpenseCategoriesAndAccounts(userId);
+  const [{ categoriesList, accounts }, allTransfers] = await Promise.all([
+    getExpenseCategoriesAndAccounts(userId),
+    dbQueryAllTransfers(userId),
+  ]);
   const weekStart = sundayOfWeek(options.weekStart);
   const wb = XLSX.utils.book_new();
 
@@ -579,6 +599,35 @@ export async function buildDailyExpenseTrackerXlsxBuffer(
   }
   const lists = appendSheet(wb, "Lists", listsRows);
   lists["!cols"] = [{ wch: 28 }, { wch: 32 }, { wch: 10 }];
+
+  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6, 23, 59, 59, 999);
+  const weekTransfers = allTransfers.filter((t) => {
+    const d = new Date(t.occurredAt);
+    return d >= weekStart && d <= weekEnd;
+  });
+  const transferSheetRows: SheetValue[][] = [
+    ["Date", "From Account", "To Account", "Amount", "Currency", "Description"],
+  ];
+  for (const t of weekTransfers) {
+    if (!t.fromAccount || !t.toAccount) continue;
+    let description = "";
+    try {
+      description = decryptTransactionPayload(userId, t.payload).description;
+    } catch { /* ignore */ }
+    const fromName = decryptFinancePlaintext(userId, t.fromAccount.name);
+    const toName = decryptFinancePlaintext(userId, t.toAccount.name);
+    const amount = transferAmountCentsFromRow(userId, { amountCents: t.amountCents, payload: t.payload }) / 100;
+    transferSheetRows.push([isoDate(new Date(t.occurredAt)), fromName, toName, amount, t.currency, description]);
+  }
+  const transfersWs = appendSheet(wb, "Transfers", transferSheetRows);
+  transfersWs["!cols"] = [
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 28 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 36 },
+  ];
 
   wb.Workbook = wb.Workbook ?? {};
   wb.Workbook.Sheets = wb.SheetNames.map((name) => ({

@@ -306,12 +306,14 @@ export async function computeDashboardOverviewByCurrency(
   const netByBucket = await mergeTransactionBucketsWithAccountOpenings(userId);
 
   const db = getDb();
-  const finAccountsRaw = await db.query.financialAccounts.findMany({
-    where: eq(financialAccounts.userId, userId),
-  });
+  const [finAccountsRaw, lendingRows] = await Promise.all([
+    db.query.financialAccounts.findMany({ where: eq(financialAccounts.userId, userId) }),
+    db.query.lendings.findMany({ where: eq(lendings.userId, userId), with: { payments: true } }),
+  ]);
   const finAccounts = finAccountsRaw.map((a) =>
     normalizeFinancialAccountRow(userId, a),
   );
+  const finAccountById = new Map(finAccounts.map((a) => [a.id, a]));
   const creditCardWithLimitIds = new Set(
     finAccounts
       .filter(
@@ -323,6 +325,39 @@ export async function computeDashboardOverviewByCurrency(
       )
       .map((a) => a.id),
   );
+
+  // For receivables funded from a non-credit account, subtract the outstanding
+  // balance from that account's bucket (the cash left when it was lent out).
+  for (const row of lendingRows) {
+    const { payments: payList, ...lendRaw } = row;
+    const L = normalizeLendingRow(userId, lendRaw);
+    if (L.kind !== "receivable") continue;
+    if (L.linkedCreditAccountId) continue; // handled by credit utilization
+    if (!L.sourceAccountId) continue;
+    const c = L.currency as FiatCurrency;
+    if (!SUPPORTED_CURRENCIES.includes(c)) continue;
+    const paidCents = payList.reduce(
+      (s, p) => s + normalizeLendingPaymentRow(userId, p).amountCents,
+      0,
+    );
+    const remainingCents = Math.max(0, L.principalCents - paidCents);
+    if (remainingCents <= 0) continue;
+    const bucketKey = `${L.sourceAccountId}|${c}`;
+    let b = netByBucket.get(bucketKey);
+    if (!b) {
+      const acc = finAccountById.get(L.sourceAccountId);
+      if (!acc) continue;
+      b = {
+        income: 0,
+        expense: 0,
+        openingMinor: 0,
+        accountName: decryptFinancePlaintext(userId, acc.name),
+        currency: c,
+      };
+      netByBucket.set(bucketKey, b);
+    }
+    b.expense += remainingCents;
+  }
 
   for (const [bucketKey, b] of netByBucket) {
     const accountId = bucketKey.split("|")[0];
@@ -393,10 +428,6 @@ export async function computeDashboardOverviewByCurrency(
     }
   }
 
-  const lendingRows = await db.query.lendings.findMany({
-    where: eq(lendings.userId, userId),
-    with: { payments: true },
-  });
   for (const row of lendingRows) {
     const { payments: payList, ...lendRaw } = row;
     const L = normalizeLendingRow(userId, lendRaw);
