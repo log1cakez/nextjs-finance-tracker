@@ -218,7 +218,31 @@ async function addDropdownsToWorkbook(
   await styleSheetXml(zip, "xl/worksheets/sheet1.xml", styleSummarySheetXml);
   await styleSheetXml(zip, "xl/worksheets/sheet9.xml", styleEntriesSheetXml);
   await styleSheetXml(zip, "xl/worksheets/sheet10.xml", styleListsSheetXml);
-  await styleSheetXml(zip, "xl/worksheets/sheet11.xml", styleTransfersSheetXml);
+
+  // Transfers sheet: style + dropdowns for From Account (B) and To Account (C).
+  const transfersValidations = [
+    dataValidationXml(
+      `B2:B500`,
+      accountRange,
+      "From Account",
+      "Choose one of your app accounts.",
+    ),
+    dataValidationXml(
+      `C2:C500`,
+      accountRange,
+      "To Account",
+      "Choose one of your app accounts.",
+    ),
+  ].join("");
+  const transfersValidationBlock = `<dataValidations count="2">${transfersValidations}</dataValidations>`;
+  const transfersFile = zip.file("xl/worksheets/sheet11.xml");
+  if (transfersFile) {
+    const xml = await transfersFile.async("string");
+    zip.file(
+      "xl/worksheets/sheet11.xml",
+      styleTransfersSheetXml(injectBeforeWorksheetExt(xml, transfersValidationBlock)),
+    );
+  }
 
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -618,6 +642,11 @@ export async function buildDailyExpenseTrackerXlsxBuffer(
     const toName = decryptFinancePlaintext(userId, t.toAccount.name);
     const amount = transferAmountCentsFromRow(userId, { amountCents: t.amountCents, payload: t.payload }) / 100;
     transferSheetRows.push([isoDate(new Date(t.occurredAt)), fromName, toName, amount, t.currency, description]);
+  }
+  // Pad with blank rows so the user has space to log new transfers with the dropdown.
+  const TRANSFER_ROWS = 50;
+  while (transferSheetRows.length - 1 < TRANSFER_ROWS) {
+    transferSheetRows.push(["", "", "", "", "", ""]);
   }
   const transfersWs = appendSheet(wb, "Transfers", transferSheetRows);
   transfersWs["!cols"] = [
