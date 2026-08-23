@@ -563,3 +563,23 @@
     animation: none !important;
   }
 }
+
+/* Drag-to-reorder quests */
+.gamify-drag-handle {
+  cursor: grab;
+  /* Critical for touch: without this, a touch-drag on the handle gets hijacked as a page scroll. */
+  touch-action: none;
+  user-select: none;
+}
+
+.gamify-drag-handle:active {
+  cursor: grabbing;
+}
+
+.gamify-quest-row-dragging {
+  position: relative;
+  z-index: 5;
+  opacity: 0.85;
+  border-color: var(--gb-cyan) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}

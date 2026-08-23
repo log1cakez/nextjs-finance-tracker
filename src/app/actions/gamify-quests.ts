@@ -5,7 +5,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { gamifyQuestCompletions, gamifyQuestCadence, gamifyQuests } from "@/db/schema";
-import { isDueOnDate, parseDaysOfWeekJson, periodKeyForCadence, WEEKDAY_LABELS } from "@/lib/gamify-period";
+import {
+  isDueOnDate,
+  parseDaysOfWeekJson,
+  periodKeyForCadence,
+  WEEKDAY_LABELS,
+  type QuestCadence,
+} from "@/lib/gamify-period";
 import { getSessionUserId } from "@/lib/session";
 
 const cadenceEnum = z.enum(gamifyQuestCadence.enumValues);
@@ -129,6 +135,46 @@ export async function deleteGamifyQuest(
   await db.delete(gamifyQuests).where(and(eq(gamifyQuests.id, id), eq(gamifyQuests.userId, userId)));
   revalidatePath("/gamify");
   return { success: true };
+}
+
+/**
+ * Persists a drag-and-drop reorder: `orderedIds` is the full, new order of every quest
+ * within one cadence group. Writes sequential sortOrder to match, after verifying every
+ * id actually belongs to this user and cadence (defense against a tampered client payload).
+ */
+export async function reorderGamifyQuests(
+  cadence: QuestCadence,
+  orderedIds: string[],
+): Promise<{ error?: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { error: "Sign in required" };
+  }
+  if (!cadenceEnum.safeParse(cadence).success || !z.array(z.string().uuid()).min(1).safeParse(orderedIds).success) {
+    return { error: "Invalid reorder request" };
+  }
+
+  const db = getDb();
+  const siblings = await db.query.gamifyQuests.findMany({
+    where: and(eq(gamifyQuests.userId, userId), eq(gamifyQuests.cadence, cadence)),
+    columns: { id: true },
+  });
+  const ownedIds = new Set(siblings.map((s) => s.id));
+  if (orderedIds.length !== ownedIds.size || !orderedIds.every((id) => ownedIds.has(id))) {
+    return { error: "Quest list is out of date — refresh and try again." };
+  }
+
+  await Promise.all(
+    orderedIds.map((id, sortOrder) =>
+      db
+        .update(gamifyQuests)
+        .set({ sortOrder })
+        .where(and(eq(gamifyQuests.id, id), eq(gamifyQuests.userId, userId))),
+    ),
+  );
+
+  revalidatePath("/gamify");
+  return {};
 }
 
 export async function toggleGamifyQuestCompletion(

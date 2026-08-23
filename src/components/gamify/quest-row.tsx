@@ -8,7 +8,21 @@ import { useGamifySound } from "@/components/gamify/gamify-sound-provider";
 
 const initial: GamifyQuestActionState = {};
 
-export function QuestRow({ quest, onEdit }: { quest: GamifyQuestSummary; onEdit: () => void }) {
+export function QuestRow({
+  quest,
+  onEdit,
+  rowRef,
+  reorderable,
+  dragging,
+  onDragHandlePointerDown,
+}: {
+  quest: GamifyQuestSummary;
+  onEdit: () => void;
+  rowRef?: (el: HTMLLIElement | null) => void;
+  reorderable?: boolean;
+  dragging?: boolean;
+  onDragHandlePointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
+}) {
   const [state, formAction, pending] = useActionState(toggleGamifyQuestCompletion, initial);
   useToastOnActionError(state.error, pending, "Could not update quest");
   const { play } = useGamifySound();
@@ -33,10 +47,21 @@ export function QuestRow({ quest, onEdit }: { quest: GamifyQuestSummary; onEdit:
 
   return (
     <li
-      className={`pixel-panel pixel-corners-sm relative flex items-center gap-3 p-3 ${
+      ref={rowRef}
+      className={`pixel-panel pixel-corners-sm relative flex items-center gap-2 p-3 ${
         quest.dueToday ? "" : "opacity-50"
-      }`}
+      } ${dragging ? "gamify-quest-row-dragging" : ""}`}
     >
+      {reorderable ? (
+        <button
+          type="button"
+          aria-label={`Drag to reorder "${quest.title}"`}
+          onPointerDown={onDragHandlePointerDown}
+          className="gamify-drag-handle -m-2 shrink-0 p-2 text-sm text-[var(--gb-dim)]"
+        >
+          ⠿
+        </button>
+      ) : null}
       <form action={formAction} className="shrink-0">
         <input type="hidden" name="questId" value={quest.id} />
         <label className="-m-2 flex cursor-pointer items-center p-2">
