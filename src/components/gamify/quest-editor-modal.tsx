@@ -109,7 +109,7 @@ export function QuestEditorModal({
               className="mt-1.5 w-full border-2 border-[var(--gb-border)] bg-[var(--gb-panel-alt)] px-3 py-2 text-sm text-[var(--gb-text)] outline-none focus:border-[var(--gb-cyan)]"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-xs text-[var(--gb-dim)]">
               Stat
               <select

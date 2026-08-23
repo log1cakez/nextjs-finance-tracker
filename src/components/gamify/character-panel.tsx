@@ -33,7 +33,7 @@ export function CharacterPanel({
   return (
     <div className="pixel-panel pixel-corners p-5 sm:p-6">
       <div className="flex items-start gap-4">
-        <RankAvatar level={character.level} />
+        <RankAvatar level={character.level} size="clamp(56px, 16vw, 72px)" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
