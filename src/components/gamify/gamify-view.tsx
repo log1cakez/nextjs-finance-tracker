@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GamifyDashboardData, GamifyQuestSummary } from "@/app/actions/gamify-dashboard";
 import { useCenterToast } from "@/components/center-toast";
 import { CharacterPanel } from "@/components/gamify/character-panel";
+import { GamifyHelpModal } from "@/components/gamify/gamify-help-modal";
 import { GamifySettingsModal } from "@/components/gamify/gamify-settings-modal";
 import { GamifySoundProvider, useGamifySound } from "@/components/gamify/gamify-sound-provider";
 import { pixelFont } from "@/components/gamify/gamify-font";
@@ -41,6 +42,7 @@ function GamifyViewInner({ data }: { data: GamifyDashboardData }) {
   const [questModal, setQuestModal] = useState<null | { quest: GamifyQuestSummary | null }>(null);
   const [showRanks, setShowRanks] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [levelUpKey, setLevelUpKey] = useState(0);
   const [shaking, setShaking] = useState(false);
   const [leveledUpStatIds, setLeveledUpStatIds] = useState<Set<string>>(new Set());
@@ -104,6 +106,15 @@ function GamifyViewInner({ data }: { data: GamifyDashboardData }) {
           >
             ⚙️
           </button>
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            aria-label="How to play"
+            title="How to play"
+            className="pixel-btn pixel-corners-sm flex h-8 w-8 shrink-0 items-center justify-center text-sm"
+          >
+            ❓
+          </button>
         </div>
         <MuteToggle />
       </div>
@@ -143,6 +154,7 @@ function GamifyViewInner({ data }: { data: GamifyDashboardData }) {
       {showSettings ? (
         <GamifySettingsModal xpMode={data.xpMode} onClose={() => setShowSettings(false)} />
       ) : null}
+      {showHelp ? <GamifyHelpModal onClose={() => setShowHelp(false)} /> : null}
       <LevelUpBurst trigger={levelUpKey} level={data.character.level} name={data.characterName} />
       {/* Modals portal here (not document.body) so they still see the --gb-* theme vars. */}
       <div id="gamify-portal-root" />

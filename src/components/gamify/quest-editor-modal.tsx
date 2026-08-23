@@ -53,6 +53,9 @@ export function QuestEditorModal({
   // quest keeps auto-filling XP from the suggested value until you type your own value.
   const [xpTouched, setXpTouched] = useState(Boolean(initialQuest));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Auto mode fully computes XP for brand-new quests — no manual override, so it always
+  // tracks the level curve. Editing an existing quest (or Manual mode) stays editable.
+  const xpLocked = xpMode === "auto" && !initialQuest;
 
   function toggleDay(day: WeekdayLabel) {
     setSelectedDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
@@ -123,39 +126,48 @@ export function QuestEditorModal({
               </select>
             </label>
             <label className="block text-xs text-[var(--gb-dim)]">
-              XP
+              XP {xpLocked ? "🔒" : ""}
               <div className="mt-1.5 flex gap-1.5">
+                <input type="hidden" name="xp" value={xp} />
                 <input
-                  name="xp"
                   type="number"
                   min={1}
                   max={999}
                   required
                   value={xp}
+                  disabled={xpLocked}
                   onChange={(e) => {
                     setXp(Number(e.target.value));
                     setXpTouched(true);
                   }}
-                  className="w-full border-2 border-[var(--gb-border)] bg-[var(--gb-panel-alt)] px-3 py-2 text-sm text-[var(--gb-text)] outline-none focus:border-[var(--gb-cyan)]"
+                  className={`w-full border-2 px-3 py-2 text-sm outline-none ${
+                    xpLocked
+                      ? "cursor-not-allowed border-[var(--gb-border)] bg-[var(--gb-track-bg)] text-[var(--gb-dim)]"
+                      : "border-[var(--gb-border)] bg-[var(--gb-panel-alt)] text-[var(--gb-text)] focus:border-[var(--gb-cyan)]"
+                  }`}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setXp(suggestedXpForCadence(xpMode, cadence, characterLevel));
-                    setXpTouched(false);
-                  }}
-                  title={xpMode === "auto" ? "Use level-scaled suggestion" : "Use default"}
-                  className="pixel-btn pixel-corners-sm shrink-0 px-2 text-[10px]"
-                >
-                  ↺
-                </button>
+                {xpLocked ? null : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setXp(suggestedXpForCadence(xpMode, cadence, characterLevel));
+                      setXpTouched(false);
+                    }}
+                    title={xpMode === "auto" ? "Use level-scaled suggestion" : "Use default"}
+                    className="pixel-btn pixel-corners-sm shrink-0 px-2 text-[10px]"
+                  >
+                    ↺
+                  </button>
+                )}
               </div>
             </label>
           </div>
           <p className="text-[10px] text-[var(--gb-dim)]">
-            {xpMode === "auto"
-              ? `XP mode: Auto — scales with your level (Lv ${characterLevel})`
-              : "XP mode: Manual — fixed defaults"}
+            {xpLocked
+              ? `XP mode: Auto — locked to your level (Lv ${characterLevel}). Switch to Manual in ⚙️ Settings to set your own.`
+              : xpMode === "auto"
+                ? `XP mode: Auto — scales with your level (Lv ${characterLevel})`
+                : "XP mode: Manual — fixed defaults"}
           </p>
           <label className="block text-xs text-[var(--gb-dim)]">
             Cadence
