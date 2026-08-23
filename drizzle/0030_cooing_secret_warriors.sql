@@ -1,0 +1,1 @@
+ALTER TABLE "gamify_quest" ADD COLUMN "days_of_week_json" text DEFAULT '[]' NOT NULL;

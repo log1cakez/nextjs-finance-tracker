@@ -46,7 +46,6 @@ export async function updateDisplayName(
     .set({ name: displayName })
     .where(eq(users.id, session.user.id));
 
-  revalidatePath("/financetracker", "layout");
-  revalidatePath("/financetracker/account");
+  revalidatePath("/", "layout");
   return { success: true };
 }

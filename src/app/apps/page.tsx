@@ -1,5 +1,6 @@
-import Link from "next/link";
+import { AppTileLink } from "@/components/app-tile-link";
 import { BrandMark } from "@/components/brand-mark";
+import { GAMIFY_SELECT_SRC } from "@/lib/gamify-sounds";
 
 const apps = [
   {
@@ -11,6 +12,12 @@ const apps = [
     href: "/eod-tracker",
     title: "Trading dashboard",
     description: "Log end-of-day entries and link out to Notion pages.",
+  },
+  {
+    href: "/gamify",
+    title: "MIDAS Gamify",
+    description: "Level up your life — daily, weekly, and monthly quests.",
+    clickSoundSrc: GAMIFY_SELECT_SRC,
   },
 ];
 
@@ -24,14 +31,15 @@ export default function AppPickerPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {apps.map((app) => (
-            <Link
+            <AppTileLink
               key={app.href}
               href={app.href}
+              clickSoundSrc={app.clickSoundSrc}
               className="block min-h-[4.25rem] touch-manipulation rounded-lg border border-zinc-200 p-4 transition-colors hover:bg-zinc-100 active:bg-zinc-100/80 dark:border-zinc-800 dark:hover:bg-zinc-900/60 dark:active:bg-zinc-900/80"
             >
               <h2 className="mb-1 font-medium text-zinc-900 dark:text-zinc-100">{app.title}</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">{app.description}</p>
-            </Link>
+            </AppTileLink>
           ))}
         </div>
       </div>

@@ -28,12 +28,13 @@ export function AppShell({
   preferredCurrency,
 }: {
   children: React.ReactNode;
-  user: { email?: string | null; name?: string | null } | null;
+  user: { email?: string | null; name?: string | null; canChangePassword: boolean } | null;
   preferredCurrency: FiatCurrency;
 }) {
   const pathname = usePathname();
   const hideHeader = pathname ? HIDE_HEADER_PATHS.has(pathname) : false;
-  const wideContent = pathname?.startsWith("/eod-tracker") ?? false;
+  const wideContent =
+    (pathname?.startsWith("/eod-tracker") ?? false) || (pathname?.startsWith("/gamify") ?? false);
   const financetrackerNavPad =
     Boolean(user) && (pathname?.startsWith("/financetracker") ?? false);
   const eodFloatingNavPad =
@@ -51,12 +52,13 @@ export function AppShell({
             <UserAccountMenu
               displayName={user.name || user.email || "Account"}
               email={user.email}
+              canChangePassword={user.canChangePassword}
             />
           ) : null}
           <NavbarPreferences initialCurrency={preferredCurrency} />
         </div>
       ) : (
-        <header className="border-b border-zinc-200/80 bg-gradient-to-b from-amber-500/[0.06] to-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md dark:border-zinc-800 dark:from-amber-500/[0.08] dark:to-zinc-950/90">
+        <header className="relative z-30 border-b border-zinc-200/80 bg-gradient-to-b from-amber-500/[0.06] to-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md dark:border-zinc-800 dark:from-amber-500/[0.08] dark:to-zinc-950/90">
           <div
             className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4 ${wideContent ? "max-w-none" : "max-w-5xl"}`}
           >
@@ -93,6 +95,7 @@ export function AppShell({
                 <UserAccountMenu
                   displayName={user.name || user.email || "Account"}
                   email={user.email}
+                  canChangePassword={user.canChangePassword}
                 />
               ) : null}
               <NavbarPreferences initialCurrency={preferredCurrency} />

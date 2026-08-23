@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/app-shell";
 import { ExtensionAttrCleanup } from "@/components/extension-attr-cleanup";
 import { CenterToastProvider } from "@/components/center-toast";
 import { ThemeProvider } from "@/components/theme-provider";
+import { getDb } from "@/db";
+import { users } from "@/db/schema";
 import { APP_DESCRIPTION, APP_PAGE_TITLE } from "@/lib/brand";
 import { getPreferredCurrency } from "@/lib/preferences";
 import "./globals.css";
@@ -56,12 +59,19 @@ export default async function RootLayout({
     auth(),
     getPreferredCurrency(),
   ]);
-  const user = session?.user
-    ? {
-        email: session.user.email,
-        name: session.user.name,
-      }
-    : null;
+  let user: { email?: string | null; name?: string | null; canChangePassword: boolean } | null =
+    null;
+  if (session?.user?.id) {
+    const row = await getDb().query.users.findFirst({
+      where: eq(users.id, session.user.id),
+      columns: { passwordHash: true },
+    });
+    user = {
+      email: session.user.email,
+      name: session.user.name,
+      canChangePassword: Boolean(row?.passwordHash),
+    };
+  }
 
   return (
     <html
