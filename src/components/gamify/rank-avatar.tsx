@@ -20,7 +20,14 @@ const PAD = 14;
 const WIDTH = COLS * CELL + PAD * 2;
 const HEIGHT = ROWS * CELL + PAD * 2;
 
-export function RankAvatar({ level, size = 72 }: { level: number; size?: number }) {
+export function RankAvatar({
+  level,
+  size = 72,
+}: {
+  level: number;
+  /** Number (px) or any CSS length, e.g. "clamp(56px, 16vw, 72px)" for fluid sizing. */
+  size?: number | string;
+}) {
   const tier = rankTierForLevel(level);
 
   const cells: { x: number; y: number; color: string }[] = [];

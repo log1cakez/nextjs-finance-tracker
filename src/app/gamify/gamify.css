@@ -185,9 +185,10 @@
   z-index: 200;
   background: rgba(4, 4, 14, 0.75);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  overflow-y: auto;
+  padding: 1.5rem 1rem;
 }
 
 /* Confirm dialogs stack above a regular modal (e.g. delete confirmation opened from an edit modal). */
@@ -197,9 +198,17 @@
   z-index: 220;
   background: rgba(4, 4, 14, 0.75);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  overflow-y: auto;
+  padding: 1.5rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .gamify-modal-backdrop,
+  .gamify-confirm-backdrop {
+    align-items: center;
+  }
 }
 
 .rank-avatar-wrap {

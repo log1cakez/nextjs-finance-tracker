@@ -37,18 +37,20 @@ export function QuestRow({ quest, onEdit }: { quest: GamifyQuestSummary; onEdit:
         quest.dueToday ? "" : "opacity-50"
       }`}
     >
-      <form action={formAction}>
+      <form action={formAction} className="shrink-0">
         <input type="hidden" name="questId" value={quest.id} />
-        <input
-          key={`${quest.id}-${quest.completed}`}
-          type="checkbox"
-          className="pixel-checkbox"
-          defaultChecked={quest.completed}
-          disabled={pending || !quest.dueToday}
-          onChange={(e) => e.currentTarget.form?.requestSubmit()}
-          aria-label={`Mark "${quest.title}" complete`}
-          title={quest.dueToday ? undefined : "Not scheduled for today"}
-        />
+        <label className="-m-2 flex cursor-pointer items-center p-2">
+          <input
+            key={`${quest.id}-${quest.completed}`}
+            type="checkbox"
+            className="pixel-checkbox"
+            defaultChecked={quest.completed}
+            disabled={pending || !quest.dueToday}
+            onChange={(e) => e.currentTarget.form?.requestSubmit()}
+            aria-label={`Mark "${quest.title}" complete`}
+            title={quest.dueToday ? undefined : "Not scheduled for today"}
+          />
+        </label>
       </form>
       <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left">
         <p
