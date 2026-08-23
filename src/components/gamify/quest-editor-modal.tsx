@@ -132,7 +132,6 @@ export function QuestEditorModal({
                 <input
                   type="number"
                   min={1}
-                  max={999}
                   required
                   value={xp}
                   disabled={xpLocked}

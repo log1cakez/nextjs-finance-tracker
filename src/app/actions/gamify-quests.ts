@@ -21,7 +21,7 @@ const questSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
   statId: z.string().uuid("Pick a stat"),
   cadence: cadenceEnum,
-  xp: z.coerce.number().int().min(1, "XP must be at least 1").max(999, "XP must be 999 or less"),
+  xp: z.coerce.number().int().min(1, "XP must be at least 1"),
 });
 
 function parseDaysOfWeek(formData: FormData, cadence: z.infer<typeof cadenceEnum>): string[] {
