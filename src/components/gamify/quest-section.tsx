@@ -21,7 +21,7 @@ export function QuestSection({
   const progressPct = section.possibleXp > 0 ? (section.earnedXp / section.possibleXp) * 100 : 0;
 
   return (
-    <div className="pixel-panel pixel-corners p-4 sm:p-5">
+    <div className="pixel-panel pixel-corners min-w-0 p-4 sm:p-5">
       <div>
         <h2 className="pixel-font text-xs text-[var(--gb-cyan)]">{CADENCE_TITLES[section.cadence]}</h2>
         <p className="mt-1 text-[10px] text-[var(--gb-dim)]">{periodLabelForCadence(section.cadence)}</p>

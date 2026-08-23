@@ -37,7 +37,7 @@ export function StatGrid({
               key={s.id}
               type="button"
               onClick={() => setModal({ stat: s })}
-              className={`pixel-panel pixel-corners-sm p-3 text-left transition hover:brightness-110 ${
+              className={`pixel-panel pixel-corners-sm min-w-0 p-3 text-left transition hover:brightness-110 ${
                 leveledUpStatIds?.has(s.id) ? "gamify-stat-tile-leveled" : ""
               }`}
               style={{ borderColor: s.color }}

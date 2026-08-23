@@ -85,7 +85,7 @@ function GamifyViewInner({ data }: { data: GamifyDashboardData }) {
 
   return (
     <div
-      className={`gamify-root ${pixelFont.variable} ${shaking ? "gamify-shaking" : ""}`}
+      className={`gamify-root min-w-0 ${pixelFont.variable} ${shaking ? "gamify-shaking" : ""}`}
       {...uiSounds}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -133,7 +133,7 @@ function GamifyViewInner({ data }: { data: GamifyDashboardData }) {
               + NEW QUEST
             </button>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <QuestSection section={data.daily} onEditQuest={(quest) => setQuestModal({ quest })} />
             <QuestSection section={data.weekly} onEditQuest={(quest) => setQuestModal({ quest })} />
             <QuestSection section={data.monthly} onEditQuest={(quest) => setQuestModal({ quest })} />
