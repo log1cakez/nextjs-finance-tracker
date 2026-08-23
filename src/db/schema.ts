@@ -46,6 +46,12 @@ export const lendingRepaymentStyle = pgEnum("lending_repayment_style", [
   "installment",
 ]);
 
+export const gamifyQuestCadence = pgEnum("gamify_quest_cadence", [
+  "daily",
+  "weekly",
+  "monthly",
+]);
+
 export const users = pgTable("user", {
   id: text("id")
     .primaryKey()
@@ -430,6 +436,96 @@ export const eodAiMonthSummaries = pgTable(
   }),
 );
 
+export const gamifyXpMode = pgEnum("gamify_xp_mode", ["auto", "manual"]);
+
+/** MIDAS Gamify: one row per user — character name + preferences. */
+export const gamifyProfiles = pgTable("gamify_profile", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  characterName: text("character_name").notNull().default("Adventurer"),
+  /** "auto": new quest XP scales with character level; "manual": fixed defaults, fully user-set. */
+  xpMode: gamifyXpMode("xp_mode").notNull().default("auto"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** MIDAS Gamify: user-defined RPG-style stats (Trading, Endurance, Wisdom, ...). */
+export const gamifyStats = pgTable(
+  "gamify_stat",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Emoji glyph shown on the stat tile. */
+    icon: text("icon").notNull().default(""),
+    /** Hex accent color for the stat tile / XP bar. */
+    color: text("color").notNull().default("#22d3ee"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userNameUq: uniqueIndex("gamify_stat_user_name").on(t.userId, t.name),
+  }),
+);
+
+/** MIDAS Gamify: recurring quest templates (daily/weekly/monthly), each tied to a stat. */
+export const gamifyQuests = pgTable("gamify_quest", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  statId: uuid("stat_id")
+    .notNull()
+    .references(() => gamifyStats.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  cadence: gamifyQuestCadence("cadence").notNull(),
+  xp: integer("xp").notNull(),
+  /**
+   * Daily quests only: JSON string[] of weekday labels ("Sun".."Sat") it's due on.
+   * Empty array (default) = every day.
+   */
+  daysOfWeekJson: text("days_of_week_json").notNull().default("[]"),
+  /** Soft-disable instead of deleting, so past completions keep their history. */
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * MIDAS Gamify: one row per quest completed for a given period (day/week/month).
+ * The source of truth for all XP — quest/stat fields are denormalized snapshots so
+ * XP history survives later edits or deletion of the quest or stat.
+ */
+export const gamifyQuestCompletions = pgTable(
+  "gamify_quest_completion",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    questId: uuid("quest_id").references(() => gamifyQuests.id, { onDelete: "set null" }),
+    statId: uuid("stat_id").references(() => gamifyStats.id, { onDelete: "set null" }),
+    questTitle: text("quest_title").notNull(),
+    statName: text("stat_name").notNull(),
+    statIcon: text("stat_icon").notNull().default(""),
+    statColor: text("stat_color").notNull().default("#22d3ee"),
+    cadence: gamifyQuestCadence("cadence").notNull(),
+    xpAwarded: integer("xp_awarded").notNull(),
+    /** "YYYY-MM-DD" (daily), Sunday-of-week "YYYY-MM-DD" (weekly), or "YYYY-MM" (monthly). */
+    periodKey: text("period_key").notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    questPeriodUq: uniqueIndex("gamify_quest_completion_quest_period").on(
+      t.questId,
+      t.periodKey,
+    ),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
@@ -443,6 +539,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   eodTrackerRows: many(eodTrackerRows),
   eodTradingAccounts: many(eodTradingAccounts),
   eodAiMonthSummaries: many(eodAiMonthSummaries),
+  gamifyProfile: many(gamifyProfiles),
+  gamifyStats: many(gamifyStats),
+  gamifyQuests: many(gamifyQuests),
+  gamifyQuestCompletions: many(gamifyQuestCompletions),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -570,6 +670,34 @@ export const eodAiMonthSummariesRelations = relations(eodAiMonthSummaries, ({ on
   user: one(users, { fields: [eodAiMonthSummaries.userId], references: [users.id] }),
 }));
 
+export const gamifyProfilesRelations = relations(gamifyProfiles, ({ one }) => ({
+  user: one(users, { fields: [gamifyProfiles.userId], references: [users.id] }),
+}));
+
+export const gamifyStatsRelations = relations(gamifyStats, ({ one, many }) => ({
+  user: one(users, { fields: [gamifyStats.userId], references: [users.id] }),
+  quests: many(gamifyQuests),
+  completions: many(gamifyQuestCompletions),
+}));
+
+export const gamifyQuestsRelations = relations(gamifyQuests, ({ one, many }) => ({
+  user: one(users, { fields: [gamifyQuests.userId], references: [users.id] }),
+  stat: one(gamifyStats, { fields: [gamifyQuests.statId], references: [gamifyStats.id] }),
+  completions: many(gamifyQuestCompletions),
+}));
+
+export const gamifyQuestCompletionsRelations = relations(gamifyQuestCompletions, ({ one }) => ({
+  user: one(users, { fields: [gamifyQuestCompletions.userId], references: [users.id] }),
+  quest: one(gamifyQuests, {
+    fields: [gamifyQuestCompletions.questId],
+    references: [gamifyQuests.id],
+  }),
+  stat: one(gamifyStats, {
+    fields: [gamifyQuestCompletions.statId],
+    references: [gamifyStats.id],
+  }),
+}));
+
 export const schema = {
   users,
   accounts,
@@ -589,6 +717,10 @@ export const schema = {
   eodTrackerRows,
   eodTradingAccounts,
   eodAiMonthSummaries,
+  gamifyProfiles,
+  gamifyStats,
+  gamifyQuests,
+  gamifyQuestCompletions,
   usersRelations,
   accountsRelations,
   sessionsRelations,
@@ -604,4 +736,8 @@ export const schema = {
   eodTrackerRowsRelations,
   eodTradingAccountsRelations,
   eodAiMonthSummariesRelations,
+  gamifyProfilesRelations,
+  gamifyStatsRelations,
+  gamifyQuestsRelations,
+  gamifyQuestCompletionsRelations,
 };

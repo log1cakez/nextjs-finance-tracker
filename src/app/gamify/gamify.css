@@ -1,0 +1,556 @@
+.gamify-root {
+  /* Light mode: paper-white 8-bit palette */
+  --gb-bg: #eef0fb;
+  --gb-panel: #ffffff;
+  --gb-panel-alt: #f1f2fb;
+  --gb-border: #4c4f9e;
+  --gb-text: #1b1b3a;
+  --gb-dim: #5c5f8a;
+  --gb-cyan: #0891b2;
+  --gb-magenta: #c0248f;
+  --gb-yellow: #b45309;
+  --gb-green: #15803d;
+  --gb-track-bg: #dcdef2;
+  --gb-scanline-opacity: 0.12;
+  position: relative;
+  border-radius: 0.75rem;
+  background: var(--gb-bg);
+  background-image:
+    radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--gb-cyan) 14%, transparent), transparent 45%),
+    radial-gradient(circle at 85% 100%, color-mix(in srgb, var(--gb-magenta) 14%, transparent), transparent 45%);
+  color: var(--gb-text);
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.dark .gamify-root {
+  /* Dark mode: neon 8-bit palette */
+  --gb-bg: #0b0b1f;
+  --gb-panel: #14142b;
+  --gb-panel-alt: #1b1b3a;
+  --gb-border: #3d3d7a;
+  --gb-text: #e8e8ff;
+  --gb-dim: #8f8fc0;
+  --gb-cyan: #4deaff;
+  --gb-magenta: #ff5cd6;
+  --gb-yellow: #ffe14d;
+  --gb-green: #52ff9d;
+  --gb-track-bg: #05050f;
+  --gb-scanline-opacity: 0.35;
+}
+
+@media (min-width: 640px) {
+  .gamify-root {
+    padding: 1.75rem;
+  }
+}
+
+.gamify-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Negative, not just behind siblings: keeps `.gamify-root` from forming its
+     own stacking context, so it never outranks the site header (e.g. the
+     account dropdown) regardless of DOM order. */
+  z-index: -1;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.22) 0px,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: var(--gb-scanline-opacity);
+  mix-blend-mode: overlay;
+}
+
+.pixel-font {
+  font-family: var(--font-pixel), "Courier New", monospace;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+}
+
+.pixel-corners {
+  clip-path: polygon(
+    0 8px,
+    8px 8px,
+    8px 0,
+    calc(100% - 8px) 0,
+    calc(100% - 8px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 8px) calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    8px 100%,
+    8px calc(100% - 8px),
+    0 calc(100% - 8px)
+  );
+}
+
+.pixel-corners-sm {
+  clip-path: polygon(
+    0 4px,
+    4px 4px,
+    4px 0,
+    calc(100% - 4px) 0,
+    calc(100% - 4px) 4px,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    4px calc(100% - 4px),
+    0 calc(100% - 4px)
+  );
+}
+
+.pixel-panel {
+  background: var(--gb-panel);
+  border: 3px solid var(--gb-border);
+}
+
+.pixel-btn {
+  background: var(--gb-panel-alt);
+  border: 3px solid var(--gb-border);
+  color: var(--gb-text);
+  transition:
+    transform 0.08s ease,
+    filter 0.15s ease;
+}
+
+.pixel-btn:hover {
+  filter: brightness(1.2);
+}
+
+.pixel-btn:active {
+  transform: translateY(2px);
+}
+
+.pixel-checkbox {
+  appearance: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  background: var(--gb-panel-alt);
+  border: 3px solid var(--gb-border);
+  cursor: pointer;
+  position: relative;
+}
+
+.pixel-checkbox:checked {
+  background: var(--gb-green);
+  border-color: var(--gb-green);
+}
+
+.pixel-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(45deg, transparent 40%, var(--gb-bg) 40%, var(--gb-bg) 60%, transparent 60%),
+    linear-gradient(-45deg, transparent 40%, var(--gb-bg) 40%, var(--gb-bg) 60%, transparent 60%);
+}
+
+.pixel-xp-track {
+  position: relative;
+  height: 0.9rem;
+  background: var(--gb-track-bg);
+  border: 2px solid var(--gb-border);
+  overflow: hidden;
+}
+
+.pixel-xp-fill {
+  height: 100%;
+  background-image: linear-gradient(90deg, var(--fill-color, var(--gb-cyan)), var(--fill-color, var(--gb-cyan)));
+  transition: width 0.4s ease;
+}
+
+.pixel-xp-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.4) 0,
+    rgba(0, 0, 0, 0.4) 2px,
+    transparent 2px,
+    transparent 10px
+  );
+  pointer-events: none;
+}
+
+.gamify-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(4, 4, 14, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+/* Confirm dialogs stack above a regular modal (e.g. delete confirmation opened from an edit modal). */
+.gamify-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  background: rgba(4, 4, 14, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.rank-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--rank-glow) 65%, transparent));
+}
+
+.rank-avatar-sprite {
+  image-rendering: pixelated;
+  animation: rank-avatar-bob 2.4s ease-in-out infinite;
+}
+
+.rank-avatar-shimmer {
+  animation:
+    rank-avatar-bob 2.4s ease-in-out infinite,
+    rank-avatar-hue 3.2s linear infinite;
+}
+
+.rank-avatar-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid var(--rank-glow, currentColor);
+  opacity: 0.55;
+  animation: rank-avatar-ring-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes rank-avatar-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes rank-avatar-hue {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
+@keyframes rank-avatar-ring-pulse {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.65;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rank-avatar-sprite,
+  .rank-avatar-shimmer,
+  .rank-avatar-ring {
+    animation: none;
+  }
+}
+
+/* Level-up full-panel celebration */
+.gamify-levelup-burst {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gamify-levelup-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, #fff 0%, var(--gb-yellow, #ffe14d) 35%, transparent 70%);
+  opacity: 0;
+  animation: gamify-levelup-flash 0.5s ease-out forwards;
+}
+
+.gamify-levelup-rays {
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--gb-yellow, #ffe14d) 22%, transparent) 0deg 6deg,
+    transparent 6deg 20deg
+  );
+  border-radius: 9999px;
+  opacity: 0;
+  animation:
+    gamify-levelup-rays-spin 5s linear infinite,
+    gamify-levelup-rays-fade 2.2s ease-out forwards;
+}
+
+.gamify-levelup-ring {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  border: 3px solid var(--gb-yellow, #ffe14d);
+  opacity: 0;
+  animation: gamify-levelup-ring-expand 1s cubic-bezier(0.15, 0.8, 0.3, 1) forwards;
+}
+
+.gamify-levelup-ring-2 {
+  border-color: var(--gb-cyan, #4deaff);
+  animation-delay: 0.15s;
+}
+
+.gamify-levelup-label {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  color: var(--gb-yellow, #ffe14d);
+  text-shadow:
+    0 0 8px var(--gb-yellow, #ffe14d),
+    0 0 24px var(--gb-yellow, #ffe14d);
+  animation:
+    gamify-levelup-pop 2.2s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards,
+    gamify-levelup-glow 0.5s ease-in-out 0.6s 3;
+}
+
+.gamify-levelup-label .sub {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.55em;
+  color: var(--gb-text, #fff);
+  text-shadow: none;
+}
+
+.gamify-levelup-spark {
+  display: inline-block;
+  margin: 0 0.4em;
+  color: var(--gb-cyan, #4deaff);
+  animation: gamify-levelup-spark-twinkle 0.6s ease-in-out infinite;
+}
+
+.gamify-levelup-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--size, 8px);
+  height: var(--size, 8px);
+  margin-top: calc(var(--size, 8px) / -2);
+  margin-left: calc(var(--size, 8px) / -2);
+  background: var(--p-color, var(--gb-cyan));
+  opacity: 0;
+  transform: rotate(var(--angle)) translateX(0) rotate(0deg);
+  animation: gamify-levelup-particle 1.6s cubic-bezier(0.15, 0.6, 0.35, 1) var(--delay, 0s) forwards;
+}
+
+.gamify-root.gamify-shaking {
+  animation: gamify-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes gamify-levelup-flash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes gamify-levelup-rays-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gamify-levelup-rays-fade {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes gamify-levelup-ring-expand {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(9);
+    opacity: 0;
+  }
+}
+
+@keyframes gamify-levelup-pop {
+  0% {
+    transform: scale(0.2) rotate(-6deg);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(1.3) rotate(3deg);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(0.95) rotate(-1deg);
+  }
+  28% {
+    transform: scale(1.06) rotate(0deg);
+  }
+  36%,
+  82% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08) rotate(0deg);
+  }
+}
+
+@keyframes gamify-levelup-glow {
+  0%,
+  100% {
+    text-shadow:
+      0 0 8px var(--gb-yellow, #ffe14d),
+      0 0 24px var(--gb-yellow, #ffe14d);
+  }
+  50% {
+    text-shadow:
+      0 0 16px #fff,
+      0 0 42px var(--gb-yellow, #ffe14d),
+      0 0 70px var(--gb-yellow, #ffe14d);
+  }
+}
+
+@keyframes gamify-levelup-spark-twinkle {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+}
+
+@keyframes gamify-levelup-particle {
+  0% {
+    transform: rotate(var(--angle)) translateX(0) rotate(0deg) scale(0.4);
+    opacity: 1;
+  }
+  15% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateX(calc(var(--dist) * 0.5)) rotate(calc(var(--spin) * 0.4)) scale(1.1);
+  }
+  100% {
+    transform: rotate(var(--angle)) translateX(var(--dist)) translateY(40px) rotate(var(--spin)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes gamify-shake {
+  10%,
+  90% {
+    transform: translate3d(-2px, 0, 0);
+  }
+  20%,
+  80% {
+    transform: translate3d(4px, 0, 0);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translate3d(-7px, 0, 0);
+  }
+  40%,
+  60% {
+    transform: translate3d(7px, 0, 0);
+  }
+}
+
+/* Stat-tile level-up flash */
+@keyframes gamify-stat-flash {
+  0%,
+  100% {
+    box-shadow: none;
+    transform: scale(1);
+  }
+  30% {
+    box-shadow: 0 0 0 3px var(--gb-yellow, #ffe14d), 0 0 18px var(--gb-yellow, #ffe14d);
+    transform: scale(1.06);
+  }
+}
+
+.gamify-stat-tile-leveled {
+  animation: gamify-stat-flash 1.1s ease-out;
+}
+
+/* Floating "+XP" popup on quest completion */
+.gamify-xp-pop {
+  position: absolute;
+  right: 0.5rem;
+  top: -0.25rem;
+  pointer-events: none;
+  color: var(--gb-yellow, #ffe14d);
+  font-size: 0.65rem;
+  animation: gamify-xp-pop 0.9s ease-out forwards;
+}
+
+@keyframes gamify-xp-pop {
+  0% {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-22px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gamify-levelup-label,
+  .gamify-levelup-particle,
+  .gamify-levelup-flash,
+  .gamify-levelup-rays,
+  .gamify-levelup-ring,
+  .gamify-levelup-spark,
+  .gamify-stat-tile-leveled,
+  .gamify-xp-pop,
+  .gamify-root.gamify-shaking {
+    animation: none !important;
+  }
+}

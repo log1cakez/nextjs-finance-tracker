@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOutAction } from "@/app/actions/auth";
+import { AccountSettingsModal } from "@/components/account-settings-modal";
 import { ExportExcelButton } from "@/components/export-excel-button";
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -23,12 +25,17 @@ function ChevronDown({ open }: { open: boolean }) {
 export function UserAccountMenu({
   displayName,
   email,
+  canChangePassword,
 }: {
   displayName: string;
   email?: string | null;
+  canChangePassword: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+  const isGamify = pathname?.startsWith("/gamify") ?? false;
 
   useEffect(() => {
     if (!open) return;
@@ -76,15 +83,18 @@ export function UserAccountMenu({
           >
             App dashboard
           </Link>
-          <Link
-            href="/financetracker/account"
+          <button
+            type="button"
             role="menuitem"
-            className="block px-3 py-3 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700"
-            onClick={() => setOpen(false)}
+            className="block w-full px-3 py-3 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 sm:py-2 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:active:bg-zinc-700"
+            onClick={() => {
+              setOpen(false);
+              setShowAccountModal(true);
+            }}
           >
             Account
-          </Link>
-          <ExportExcelButton variant="menu" />
+          </button>
+          {isGamify ? null : <ExportExcelButton variant="menu" />}
           <form action={signOutAction} className="border-t border-zinc-100 dark:border-zinc-800">
             <button
               type="submit"
@@ -95,6 +105,14 @@ export function UserAccountMenu({
             </button>
           </form>
         </div>
+      ) : null}
+      {showAccountModal ? (
+        <AccountSettingsModal
+          displayName={displayName}
+          email={email}
+          canChangePassword={canChangePassword}
+          onClose={() => setShowAccountModal(false)}
+        />
       ) : null}
     </div>
   );
