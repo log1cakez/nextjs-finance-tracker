@@ -10,6 +10,7 @@ export type EodRowAnalytics = {
   result: string[];
   rrr: string;
   timeRange: string;
+  entryTime: string;
   entryTf: string;
   remarks: string;
 };
@@ -67,6 +68,7 @@ function compactTrade(row: EodRowAnalytics) {
     result: row.result,
     rrr: row.rrr || null,
     timeRange: row.timeRange || null,
+    entryTime: row.entryTime || null,
     entryTf: row.entryTf || null,
     remarks:
       remarks.length > REMARKS_MAX ? `${remarks.slice(0, REMARKS_MAX)}…` : remarks || null,
@@ -93,6 +95,7 @@ export type EodAnalyticsPayload = {
   riskTypeCounts: Record<string, number>;
   rrrCounts: Record<string, number>;
   entryTfCounts: Record<string, number>;
+  entryTimeCounts: Record<string, number>;
   timeframeEofCounts: Record<string, number>;
   poiCounts: Record<string, number>;
   weekdayCounts: Record<string, number>;
@@ -147,6 +150,7 @@ export function buildEodAnalyticsPayload(
     riskTypeCounts: countField(rows, "riskType"),
     rrrCounts: countField(rows, "rrr"),
     entryTfCounts: countField(rows, "entryTf"),
+    entryTimeCounts: countField(rows, "entryTime"),
     timeframeEofCounts: countMultiField(rows, "timeframeEof"),
     poiCounts: countMultiField(rows, "poi"),
     weekdayCounts,

@@ -404,6 +404,8 @@ export const eodTrackerRows = pgTable("eod_tracker_row", {
   resultJson: text("result_json").notNull().default("[]"),
   rrr: text("rrr").notNull().default(""),
   timeRange: text("time_range").notNull().default(""),
+  /** Discrete entry time, HH:MM in 24h, restricted to 30-minute intervals. */
+  entryTime: text("entry_time").notNull().default(""),
   entryTf: text("entry_tf").notNull().default(""),
   remarks: text("remarks").notNull().default(""),
   /** External Notion (or other) page URL for this journal row. */

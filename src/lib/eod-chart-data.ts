@@ -2,7 +2,7 @@ import type { EodRowAnalytics } from "@/lib/eod-analytics-summary";
 
 export type EodChartRowInput = Pick<
   EodRowAnalytics,
-  "tradeDate" | "session" | "result" | "trend" | "position" | "rrr" | "timeRange"
+  "tradeDate" | "session" | "result" | "trend" | "position" | "rrr" | "timeRange" | "entryTime"
 > & {
   netPnlCents: number | null;
 };

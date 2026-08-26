@@ -115,6 +115,15 @@ type EodSeedSpec = {
   notionUrl?: string;
 };
 
+/** Derives a 30-minute-interval entry time from a spec's `timeRange` start, e.g. "09:30-11:15" -> "09:30". */
+function entryTimeFromRange(timeRange: string): string {
+  const m = timeRange.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  const h = Number(m[1]);
+  const mins = Number(m[2]) < 30 ? 0 : 30;
+  return `${String(h).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
 function seedNetPnlCentsForResult(result: string[]): number | null {
   if (result.includes("Win")) return 150_00;
   if (result.includes("Loss")) return -78_00;
@@ -429,6 +438,7 @@ function buildEodSeedRows(
     resultJson: JSON.stringify(s.result),
     rrr: s.rrr,
     timeRange: s.timeRange,
+    entryTime: entryTimeFromRange(s.timeRange),
     entryTf: s.entryTf,
     remarks: s.remarks,
     notionUrl: s.notionUrl ?? "",

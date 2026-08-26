@@ -225,6 +225,13 @@
       "when": 1787466076200,
       "tag": "0031_curvy_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787665670421,
+      "tag": "0032_flimsy_luminals",
+      "breakpoints": true
     }
   ]
 }

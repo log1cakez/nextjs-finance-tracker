@@ -28,6 +28,7 @@ function rowToRecord(r: EodTrackerRow) {
     Result: r.result.join("; "),
     RRR: r.rrr || "",
     Time: r.timeRange || "",
+    "Entry Time": r.entryTime || "",
     "Entry TF": r.entryTf || "",
     Remarks: r.remarks || "",
     "Notion URL": r.notionUrl || "",

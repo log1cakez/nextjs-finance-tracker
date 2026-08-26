@@ -59,6 +59,18 @@ function splitMultiValue(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** "09:30" (24h) -> "9:30 AM" for display. Returns the input unchanged if not HH:MM. */
+function formatEntryTimeLabel(value: string): string {
+  const m = value.trim().match(/^(\d{2}):(\d{2})$/);
+  if (!m) return value;
+  const h = Number(m[1]);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m[2]} ${period}`;
+}
+
+const TOP_ENTRY_TIMES_COUNT = 3;
+
 function normalizeSessionToken(token: string): string {
   const t = token.trim().toLowerCase();
   if (!t) return "";
@@ -222,7 +234,13 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
   const sessions = useMemo(() => {
     const map = new Map<
       string,
-      { totalTrades: number; wins: number; maxRr: number; profitCents: number }
+      {
+        totalTrades: number;
+        wins: number;
+        maxRr: number;
+        profitCents: number;
+        entryTimeCounts: Map<string, number>;
+      }
     >();
     for (const row of filteredRows) {
       const tokens = splitMultiValue(row.session).map(normalizeSessionToken).filter(Boolean);
@@ -233,12 +251,17 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
           wins: 0,
           maxRr: 0,
           profitCents: 0,
+          entryTimeCounts: new Map<string, number>(),
         };
         existing.totalTrades += 1;
         if (row.result.includes("Win")) existing.wins += 1;
         const rr = parseRr(row.rrr);
         if (rr !== null) existing.maxRr = Math.max(existing.maxRr, rr);
         existing.profitCents += row.netPnlCents ?? 0;
+        const entryTime = row.entryTime.trim();
+        if (entryTime) {
+          existing.entryTimeCounts.set(entryTime, (existing.entryTimeCounts.get(entryTime) ?? 0) + 1);
+        }
         map.set(session, existing);
       }
     }
@@ -252,12 +275,17 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
 
     return ordered.map((session) => {
       const data = map.get(session)!;
+      const topEntryTimes = [...data.entryTimeCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, TOP_ENTRY_TIMES_COUNT)
+        .map(([time, count]) => ({ time, count }));
       return {
         session,
         winRate: ratioPercent(data.wins, data.totalTrades),
         totalTrades: data.totalTrades,
         maxRr: data.maxRr,
         profitUsd: data.profitCents / 100,
+        topEntryTimes,
       };
     });
   }, [filteredRows]);
@@ -481,6 +509,24 @@ export function EodAnalyticsCharts({ rows }: { rows: EodChartRowInput[] }) {
                 <StatLine label="Total Trades" value={String(s.totalTrades)} />
                 <StatLine label="Max RR" value={numberText(s.maxRr)} />
                 <StatLine label="Profit" value={`$${numberText(s.profitUsd)}`} />
+              </div>
+              <div className="mt-3 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
+                  Top Entry Times
+                </p>
+                {s.topEntryTimes.length > 0 ? (
+                  <div className="mt-1.5 space-y-1.5">
+                    {s.topEntryTimes.map((t, i) => (
+                      <StatLine
+                        key={t.time}
+                        label={`#${i + 1} ${formatEntryTimeLabel(t.time)}`}
+                        value={`${t.count} trade${t.count === 1 ? "" : "s"}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">No entry times logged.</p>
+                )}
               </div>
             </InfoCard>
           ))}

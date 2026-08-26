@@ -1,0 +1,1 @@
+ALTER TABLE "eod_tracker_row" ADD COLUMN "entry_time" text DEFAULT '' NOT NULL;

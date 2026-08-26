@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { eodTrackerRows, eodTradingAccounts, users } from "@/db/schema";
 import {
   EOD_ENTRY_TF_OPTIONS,
+  EOD_ENTRY_TIME_OPTIONS,
   EOD_POI_OPTIONS,
   EOD_POSITION_OPTIONS,
   EOD_RESULT_OPTIONS,
@@ -57,6 +58,16 @@ function needsEodNotionUrlMigration(error: unknown): boolean {
   const msg = errorText(error).toLowerCase();
   const e = error as { cause?: { code?: string } };
   if (msg.includes("notion_url") && (msg.includes("does not exist") || msg.includes("unknown"))) {
+    return true;
+  }
+  return e?.cause?.code === "42703" && msg.includes("eod_tracker_row");
+}
+
+/** Missing `entry_time` column on `eod_tracker_row` (pre-migration database). */
+function needsEodEntryTimeMigration(error: unknown): boolean {
+  const msg = errorText(error).toLowerCase();
+  const e = error as { cause?: { code?: string } };
+  if (msg.includes("entry_time") && (msg.includes("does not exist") || msg.includes("unknown"))) {
     return true;
   }
   return e?.cause?.code === "42703" && msg.includes("eod_tracker_row");
@@ -152,6 +163,12 @@ const createPayloadSchema = z.object({
   result: multiFrom(EOD_RESULT_OPTIONS),
   rrr: optionalFrom(EOD_RRR_OPTIONS),
   timeRange: z.string(),
+  entryTime: z
+    .string()
+    .refine(
+      (v) => v === "" || (EOD_ENTRY_TIME_OPTIONS as readonly string[]).includes(v),
+      "Entry time must be on a 30-minute interval",
+    ),
   entryTf: optionalFrom(EOD_ENTRY_TF_OPTIONS),
   remarks: z.string().max(5000),
   notionUrl: z
@@ -187,6 +204,7 @@ export type EodTrackerRow = {
   result: string[];
   rrr: string;
   timeRange: string;
+  entryTime: string;
   entryTf: string;
   remarks: string;
   notionUrl: string;
@@ -216,6 +234,7 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
         resultJson: eodTrackerRows.resultJson,
         rrr: eodTrackerRows.rrr,
         timeRange: eodTrackerRows.timeRange,
+        entryTime: eodTrackerRows.entryTime,
         entryTf: eodTrackerRows.entryTf,
         remarks: eodTrackerRows.remarks,
         notionUrl: eodTrackerRows.notionUrl,
@@ -242,6 +261,7 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
       result: parseJsonStringArray(r.resultJson),
       rrr: r.rrr,
       timeRange: r.timeRange,
+      entryTime: r.entryTime,
       entryTf: r.entryTf,
       remarks: r.remarks,
       notionUrl: r.notionUrl,
@@ -271,6 +291,11 @@ export async function listEodTrackerRows(): Promise<EodTrackerRow[]> {
         "EOD table is missing column notion_url. Run `npm run db:migrate` or `npm run db:push`, then refresh.",
       );
     }
+    if (needsEodEntryTimeMigration(error)) {
+      throw new Error(
+        "EOD table is missing column entry_time. Run `npm run db:migrate` or `npm run db:push`, then refresh.",
+      );
+    }
     throw error;
   }
 }
@@ -297,6 +322,7 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
         resultJson: eodTrackerRows.resultJson,
         rrr: eodTrackerRows.rrr,
         timeRange: eodTrackerRows.timeRange,
+        entryTime: eodTrackerRows.entryTime,
         entryTf: eodTrackerRows.entryTf,
         remarks: eodTrackerRows.remarks,
         notionUrl: eodTrackerRows.notionUrl,
@@ -324,6 +350,7 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
       result: parseJsonStringArray(r.resultJson),
       rrr: r.rrr,
       timeRange: normalizeTimeRange(r.timeRange),
+      entryTime: r.entryTime,
       entryTf: r.entryTf,
       remarks: r.remarks,
       notionUrl: r.notionUrl,
@@ -337,6 +364,11 @@ export async function getEodTrackerRowsForExcel(userId: string): Promise<EodTrac
     if (needsEodNotionUrlMigration(error)) {
       throw new Error(
         "EOD table is missing column notion_url. Run `npm run db:migrate` or `npm run db:push`, then refresh.",
+      );
+    }
+    if (needsEodEntryTimeMigration(error)) {
+      throw new Error(
+        "EOD table is missing column entry_time. Run `npm run db:migrate` or `npm run db:push`, then refresh.",
       );
     }
     throw error;
@@ -382,6 +414,7 @@ export async function createEodTrackerRowWithData(
     resultJson: JSON.stringify(d.result),
     rrr: d.rrr,
     timeRange: normalizeTimeRange(d.timeRange),
+    entryTime: d.entryTime,
     entryTf: d.entryTf,
     remarks: d.remarks.trim(),
     notionUrl: d.notionUrl.trim(),
@@ -429,6 +462,12 @@ export async function createEodTrackerRowWithData(
           "Database needs the latest EOD migration (notion_url). Run `npm run db:migrate` or `npm run db:push`, then try again.",
       };
     }
+    if (needsEodEntryTimeMigration(error)) {
+      return {
+        error:
+          "Database needs the latest EOD migration (entry_time). Run `npm run db:migrate` or `npm run db:push`, then try again.",
+      };
+    }
     throw error;
   }
 }
@@ -465,6 +504,7 @@ export async function updateEodTrackerRowWithData(
         resultJson: JSON.stringify(d.result),
         rrr: d.rrr,
         timeRange: normalizeTimeRange(d.timeRange),
+        entryTime: d.entryTime,
         entryTf: d.entryTf,
         remarks: d.remarks.trim(),
         notionUrl: d.notionUrl.trim(),
@@ -482,6 +522,12 @@ export async function updateEodTrackerRowWithData(
       return {
         error:
           "Database needs the latest EOD migration (notion_url). Run `npm run db:migrate` or `npm run db:push`, then try again.",
+      };
+    }
+    if (needsEodEntryTimeMigration(error)) {
+      return {
+        error:
+          "Database needs the latest EOD migration (entry_time). Run `npm run db:migrate` or `npm run db:push`, then try again.",
       };
     }
     throw error;

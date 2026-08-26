@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { EodTrackerRow } from "@/app/actions/eod-tracker-rows";
 import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
 import { AddEodLauncher } from "@/components/eod/add-eod-launcher";
+import { ProfitCalculatorLauncher } from "@/components/eod/profit-calculator-launcher";
 import { EodAiAnalyticsPanel } from "@/components/eod/eod-ai-analytics-panel";
 import { EodAnalyticsCharts } from "@/components/eod/eod-analytics-charts";
 import { EodRowManageActions } from "@/components/eod/eod-row-manage-actions";
@@ -44,6 +45,7 @@ type EodSortColumn =
   | "pnl"
   | "rrr"
   | "timeRange"
+  | "entryTime"
   | "entryTf"
   | "remarks"
   | "notion"
@@ -94,6 +96,8 @@ function rowComparableString(row: EodTrackerRow, column: EodSortColumn): string 
       return row.rrr;
     case "timeRange":
       return row.timeRange;
+    case "entryTime":
+      return row.entryTime;
     case "entryTf":
       return row.entryTf;
     case "remarks":
@@ -232,6 +236,7 @@ function EodMobileRowCard({
             result: row.result,
             rrr: row.rrr,
             timeRange: row.timeRange,
+            entryTime: row.entryTime,
             entryTf: row.entryTf,
             remarks: row.remarks,
             notionUrl: row.notionUrl,
@@ -288,6 +293,13 @@ function EodMobileRowCard({
             <span className="text-zinc-400 dark:text-zinc-500">—</span>
           )}
         </FieldLine>
+        <FieldLine label="Entry Time">
+          {row.entryTime ? (
+            <span className="font-mono text-zinc-700 dark:text-zinc-300">{row.entryTime}</span>
+          ) : (
+            <span className="text-zinc-400 dark:text-zinc-500">—</span>
+          )}
+        </FieldLine>
         <FieldLine label="Entry TF">
           <PillList items={splitMultiValue(row.entryTf)} fieldKey="entryTf" align="start" />
         </FieldLine>
@@ -330,6 +342,7 @@ const SORTABLE: { column: EodSortColumn; label: string }[] = [
   { column: "pnl", label: "Net P&L" },
   { column: "rrr", label: "RRR" },
   { column: "timeRange", label: "Time" },
+  { column: "entryTime", label: "Entry Time" },
   { column: "entryTf", label: "Entry" },
   { column: "remarks", label: "Remarks" },
   { column: "notion", label: "Notion" },
@@ -467,6 +480,7 @@ export function EodTrackerView({
         position: r.position,
         rrr: r.rrr,
         timeRange: r.timeRange,
+        entryTime: r.entryTime,
         netPnlCents: r.netPnlCents,
       })),
     [monthRows],
@@ -489,7 +503,8 @@ export function EodTrackerView({
             rows—log structure and dollars in one place.
           </p>
         </div>
-        <div className="flex w-full shrink-0 justify-stretch sm:w-auto sm:justify-end">
+        <div className="flex w-full shrink-0 flex-col gap-2 justify-stretch sm:w-auto sm:flex-row sm:justify-end">
+          <ProfitCalculatorLauncher />
           <AddEodLauncher tradingAccounts={tradingAccounts} />
         </div>
       </div>
@@ -751,6 +766,9 @@ export function EodTrackerView({
                             <td className="min-w-0 whitespace-pre-wrap break-words text-center text-zinc-700 dark:text-zinc-300">
                               {row.timeRange || "—"}
                             </td>
+                            <td className="min-w-0 whitespace-nowrap text-center font-mono text-zinc-700 dark:text-zinc-300">
+                              {row.entryTime || "—"}
+                            </td>
                             <td>
                               <PillList items={splitMultiValue(row.entryTf)} fieldKey="entryTf" />
                             </td>
@@ -790,6 +808,7 @@ export function EodTrackerView({
                                     result: row.result,
                                     rrr: row.rrr,
                                     timeRange: row.timeRange,
+                                    entryTime: row.entryTime,
                                     entryTf: row.entryTf,
                                     remarks: row.remarks,
                                     notionUrl: row.notionUrl,

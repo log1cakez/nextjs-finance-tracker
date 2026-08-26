@@ -10,6 +10,7 @@ import type { EodTradingAccount } from "@/app/actions/eod-trading-accounts";
 import { centsToInputString, parseUsdToCents } from "@/lib/eod-money";
 import {
   EOD_ENTRY_TF_OPTIONS,
+  EOD_ENTRY_TIME_OPTIONS,
   EOD_POI_OPTIONS,
   EOD_POSITION_OPTIONS,
   EOD_RESULT_OPTIONS,
@@ -82,6 +83,13 @@ function splitMultiValue(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** Renders a 24h "HH:MM" entry-time option as "HH:MM" or "hh:MM AM/PM" for display. */
+function formatEntryTimeOption(value: string, format: TimeFormatMode): string {
+  if (format === "24h") return value;
+  const { hh, mm, period } = to12hParts(value);
+  return `${Number(hh)}:${mm} ${period}`;
+}
+
 export function AddEodModal({
   open,
   onClose,
@@ -109,6 +117,7 @@ export function AddEodModal({
         result: [],
         rrr: "",
         timeRange: "",
+        entryTime: "",
         entryTf: "",
         remarks: "",
         notionUrl: "",
@@ -130,6 +139,7 @@ export function AddEodModal({
   const [timeFormat, setTimeFormat] = useState<TimeFormatMode>("24h");
   const [startTime, setStartTime] = useState(splitRange(seed.timeRange).start);
   const [endTime, setEndTime] = useState(splitRange(seed.timeRange).end);
+  const [entryTime, setEntryTime] = useState(seed.entryTime);
   const [entryTf, setEntryTf] = useState<string[]>(splitMultiValue(seed.entryTf));
   const [remarks, setRemarks] = useState(seed.remarks);
   const [notionUrl, setNotionUrl] = useState(seed.notionUrl);
@@ -142,6 +152,7 @@ export function AddEodModal({
     setTradeDate(seed.tradeDate); setSession(splitMultiValue(seed.session)); setTimeframeEof(seed.timeframeEof); setPoi(seed.poi);
     setTrend(splitMultiValue(seed.trend)); setPosition(splitMultiValue(seed.position)); setRiskType(splitMultiValue(seed.riskType)); setResult(seed.result);
     setRrr(splitMultiValue(seed.rrr)); setTimeFormat("24h"); const t = splitRange(seed.timeRange); setStartTime(t.start); setEndTime(t.end);
+    setEntryTime(seed.entryTime);
     setEntryTf(splitMultiValue(seed.entryTf)); setRemarks(seed.remarks); setNotionUrl(seed.notionUrl);
     setTradingAccountId(seed.tradingAccountId ?? null);
     setNetPnlInput(centsToInputString(seed.netPnlCents ?? null));
@@ -162,6 +173,7 @@ export function AddEodModal({
     result,
     rrr: rrr.join(MULTI_VALUE_DELIMITER),
     timeRange: startTime && endTime ? `${startTime}-${endTime}` : startTime || endTime || "",
+    entryTime,
     entryTf: entryTf.join(MULTI_VALUE_DELIMITER),
     remarks,
     notionUrl,
@@ -391,6 +403,26 @@ export function AddEodModal({
                 })}
               </div>
             )}
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              Entry Time
+            </span>
+            <select
+              value={entryTime}
+              onChange={(e) => setEntryTime(e.target.value)}
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-zinc-300 bg-white px-3 py-2 text-center text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <option value="">—</option>
+              {EOD_ENTRY_TIME_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {formatEntryTimeOption(t, timeFormat)}
+                </option>
+              ))}
+            </select>
+            <span className="block text-[11px] text-zinc-600 dark:text-zinc-500">
+              When you entered the trade. 30-minute intervals only.
+            </span>
           </label>
           <MultiTagPicker label="Entry TF" fieldKey="entryTf" options={EOD_ENTRY_TF_OPTIONS} values={entryTf} onChange={setEntryTf} />
           <label className="block space-y-1">

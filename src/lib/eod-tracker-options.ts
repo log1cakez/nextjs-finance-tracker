@@ -62,6 +62,13 @@ export const EOD_RRR_OPTIONS = [
 
 export const EOD_ENTRY_TF_OPTIONS = ["1m", "5m", "15m", "30m", "1H", "4H", "Daily"] as const;
 
+/** Entry time slots, 24h HH:MM, one every 30 minutes ("00:00", "00:30", ..., "23:30"). */
+export const EOD_ENTRY_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${String(h).padStart(2, "0")}:${m}`;
+}) as readonly string[];
+
 export type EodPillTone =
   | "blue"
   | "purple"
